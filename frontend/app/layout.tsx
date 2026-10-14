@@ -3,13 +3,12 @@ import { Archivo, Shippori_Mincho_B1 } from "next/font/google";
 import Link from "next/link";
 import { Fx } from "@/components/Fx";
 import { Hotkeys } from "@/components/Hotkeys";
-import { Scope } from "@/components/Scope";
-import { Shatter } from "@/components/Shatter";
 import { SiteNav } from "@/components/SiteNav";
 import { StatusBar } from "@/components/StatusBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MoneyProvider } from "@/lib/money";
 import { getMeta } from "@/lib/static-api";
+import { cursorVars } from "@/lib/cursors";
 import "./globals.css";
 
 const mincho = Shippori_Mincho_B1({ weight: ["500", "700"], subsets: ["latin"], variable: "--font-mincho", display: "swap" });
@@ -58,7 +57,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html
       lang="pt-BR"
       className={`${mincho.variable} ${archivo.variable}`}
-      style={{ "--cursor-grab": `url(${BASE_PATH}/cursor-grab.png)`, "--cursor-grabbing": `url(${BASE_PATH}/cursor-grabbing.png)` } as React.CSSProperties}
+      style={cursorVars(BASE_PATH)}
       suppressHydrationWarning
     >
       <head>
@@ -87,8 +86,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </MoneyProvider>
         <Hotkeys />
         <Fx />
-        <Scope />
-        <Shatter />
       </body>
     </html>
   );
