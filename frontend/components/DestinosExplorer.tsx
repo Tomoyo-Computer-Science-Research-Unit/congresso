@@ -164,13 +164,6 @@ export function DestinosExplorer() {
         fill
         flush
         style={{ gridColumn: 1, gridRow: 1 }}
-        foot={
-          <span className="flex items-center gap-2 uppercase tracking-[0.18em]">
-            menor
-            <span className="h-2 w-16 border border-line" style={{ background: "linear-gradient(90deg, var(--haze), var(--ink))" }} aria-hidden="true" />
-            maior · claro: sem emenda
-          </span>
-        }
       >
         <div className="map-wrap relative min-h-0 flex-1">
           {geo ? (
@@ -181,14 +174,16 @@ export function DestinosExplorer() {
                 const has = rank !== undefined && rank.value > 0;
                 const isSelected = selected?.ibge === ibge;
                 const opacity = has ? 0.14 + 0.86 * (1 - rank.position / Math.max(1, list.length - 1)) : 1;
+                // Sem emenda com município definido: papel, contorno tracejado; nenhuma legenda necessária.
                 return (
                   <path
                     key={ibge}
                     d={geometryPath(feature.geometry as Geometry, bbox)}
-                    fill={has ? "var(--ink)" : "var(--haze)"}
-                    fillOpacity={opacity}
-                    stroke={isSelected ? "var(--ink)" : "var(--paper)"}
+                    fill={has ? "var(--ink)" : "var(--paper)"}
+                    fillOpacity={has ? opacity : 1}
+                    stroke={isSelected ? "var(--ink)" : has ? "var(--paper)" : "var(--line-strong)"}
                     strokeWidth={isSelected ? 2.4 : 0.8}
+                    strokeDasharray={has || isSelected ? undefined : "3 3"}
                     className="map-shape cursor-pointer"
                     onClick={() => setSelectedIbge(ibge)}
                     tabIndex={0}
