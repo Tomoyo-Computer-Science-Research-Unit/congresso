@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { BarList } from "@/components/BarList";
-import { BANCADA_CURTA } from "@/lib/uf";
+import { bancadaCurta } from "@/lib/uf";
+import { useUf } from "@/lib/use-uf";
 import { useScreenHotkeys } from "@/components/Hotkeys";
 import { Panel, Screen, Segmented, Stat } from "@/components/ui";
 import { YearBars } from "@/components/YearBars";
@@ -12,7 +13,6 @@ import {
   BB_CODIGO,
   CASA_LABELS,
   METRICS,
-  TIPO_LABELS,
   displayName,
   formatInt,
   getAutores,
@@ -32,6 +32,7 @@ import {
 } from "@/lib/static-api";
 
 export function Panorama() {
+  const uf = useUf();
   const years = getYears();
   const porAno = getByYear();
   const { mode, real } = useMoneyMode();
@@ -108,7 +109,7 @@ export function Panorama() {
       <Panel
         title={
           <span>
-            <b>{BANCADA_CURTA}</b> · {yearLabel}
+            <b>{bancadaCurta(uf)}</b> · {yearLabel}
           </span>
         }
         aside={

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/UfLink";
 import { useEffect, useMemo, useState } from "react";
 import { BarList } from "@/components/BarList";
 import { useScreenHotkeys } from "@/components/Hotkeys";

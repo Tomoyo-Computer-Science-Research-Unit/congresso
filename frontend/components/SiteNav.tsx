@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { screenFromPath, ufRoute } from "@/lib/uf";
+import { useUf } from "@/lib/use-uf";
 
 export const NAV_ITEMS = [
   { href: "/", label: "Panorama", key: "1" },
@@ -12,7 +14,8 @@ export const NAV_ITEMS = [
   { href: "/metodologia", label: "Método", key: "6" }
 ];
 
-export function isActivePath(pathname: string, href: string) {
+export function isActivePath(fullPath: string, href: string) {
+  const pathname = screenFromPath(fullPath);
   if (href === "/") {
     return pathname === "/";
   }
@@ -24,6 +27,7 @@ export function isActivePath(pathname: string, href: string) {
 
 export function SiteNav() {
   const pathname = usePathname();
+  const uf = useUf();
 
   return (
     <nav aria-label="Seções" className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -33,7 +37,7 @@ export function SiteNav() {
           return (
             <li key={item.href} className="shrink-0">
               <Link
-                href={item.href}
+                href={ufRoute(uf, item.href)}
                 aria-current={active ? "page" : undefined}
                 className={`flex h-12 items-center gap-1.5 px-2.5 text-[10.5px] font-medium uppercase tracking-[0.14em] transition-colors xl:px-3 xl:text-[11px] ${
                   active ? "text-ink shadow-[inset_0_-1px_0_var(--ink)]" : "text-slate hover:text-ink"

@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { baseMonthLabel, useMoneyMode } from "@/lib/money";
+import { getMeta } from "@/lib/static-api";
+import { screenFromPath } from "@/lib/uf";
 
 const HINTS: Record<string, Array<[string, string]>> = {
   "/": [
@@ -32,9 +34,12 @@ const HINTS: Record<string, Array<[string, string]>> = {
   "/status": []
 };
 
-export function StatusBar({ latestLabel }: { latestLabel: string }) {
+export function StatusBar() {
   const pathname = usePathname();
-  const base = pathname.replace(/\/+$/, "") || "/";
+  const base = screenFromPath(pathname);
+  const meta = getMeta();
+  const dataDate = meta.snapshot_generated_at ? new Date(meta.snapshot_generated_at) : new Date(meta.generated_at);
+  const latestLabel = `Portal da Transparência · ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "America/Sao_Paulo" }).format(dataDate)}`;
   const hints = HINTS[base] ?? [];
   const { real } = useMoneyMode();
 

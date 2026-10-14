@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Roda no droplet, por cron, uma vez por dia: puxa main, baixa de novo o arquivo do Portal da
-# Transparência, regenera os dados do RJ e de SP e, se o código ou os dados mudaram desde o último
-# build, constrói as duas UFs e troca os arquivos em /root/g0v/site/emendas (RJ) e
-# /root/g0v/site/emendas/sp (SP). Falhas avisam por e-mail. O ETL de uma UF que falha não derruba
-# a outra: aquela UF segue com os dados commitados em main.
+# Transparência, regenera os dados das 27 UFs (o zip é lido uma vez) e, se o código ou os dados
+# mudaram desde o último build, faz um build Next só, com todas as UFs, e troca os arquivos em
+# /root/g0v/site/emendas (RJ na raiz, as demais em /emendas/<uf>/, dados em /emendas/data/<uf>/).
+# Falhas avisam por e-mail. Uma UF cujo ETL falha segue com os dados commitados em main; as outras
+# usam os dados novos. Cada rodada registra quanto tempo levaram ETL e build.
 #
 #   /root/g0v/build-emendas.sh               # só reconstrói se algo mudou
 #   FORCE=1 /root/g0v/build-emendas.sh       # reconstrói de qualquer jeito
@@ -17,7 +18,7 @@ SRC="$DIR/src-emendas"
 MARK="$DIR/.emendas-built"
 RUNS="$DIR/runs-emendas.jsonl"
 BASE_PATH="/emendas"
-UFS="RJ SP"
+# UFs vêm de backend/app/config.py (UF_ORDER); "all" no ETL.
 ALERT_TO="${ALERT_TO:-arete@tomoyo.systems}"
 export NEXT_TELEMETRY_DISABLED=1
 export NODE_OPTIONS="--max-old-space-size=2048"
@@ -43,20 +44,9 @@ notify() {
     | docker exec -i mailserver sendmail -t || log "aviso por e-mail falhou"
 }
 
-site_dir() {  # RJ na raiz do projeto, as outras UFs numa subpasta
-  if [ "$1" = "RJ" ]; then echo "$DIR/site$BASE_PATH"; else echo "$DIR/site$BASE_PATH/$(echo "$1" | tr 'A-Z' 'a-z')"; fi
-}
-
-base_path() {
-  if [ "$1" = "RJ" ]; then echo "$BASE_PATH"; else echo "$BASE_PATH/$(echo "$1" | tr 'A-Z' 'a-z')"; fi
-}
-
-write_status() {
-  if [ -x "${PY:-}" ]; then
-    for uf in $UFS; do
-      [ -d "$(site_dir "$uf")" ] || continue
-      (cd "$SRC/backend" && "$PY" -m app.etl.write_status --uf "$uf" --runs "$RUNS" --out "$(site_dir "$uf")/status.json") || log "status.json $uf falhou"
-    done
+write_status() {  # RJ em <site>/status.json, demais em <site>/<uf>/status.json; um HEAD no zip
+  if [ -x "${PY:-}" ] && [ -d "$DIR/site$BASE_PATH" ]; then
+    (cd "$SRC/backend" && "$PY" -m app.etl.write_status --uf all --runs "$RUNS" --site "$DIR/site$BASE_PATH") || log "status.json falhou"
   fi
 }
 
@@ -85,29 +75,52 @@ PY="$SRC/backend/.venv/bin/python"
 [ -x "$PY" ] || uv venv -q --python 3.12 "$SRC/backend/.venv"
 uv pip install -q --python "$PY" -e "$SRC/backend"
 
+etl_s=0
 if [ "${SKIP_DATA:-0}" != "1" ]; then
-  # O zip do Portal é nacional: a primeira UF baixa de novo (--refresh, 32 MB) e as outras leem o
-  # mesmo arquivo. O resto do bruto (Câmara, Senado, IBGE) fica em cache.
-  refresh="--refresh"
-  for uf in $UFS; do
-    lower="$(echo "$uf" | tr 'A-Z' 'a-z')"
-    if etl_output="$(cd "$SRC/backend" && "$PY" -m app.etl.export_snapshot --uf "$uf" $refresh 2>&1 && "$PY" -m app.etl.export_static_frontend --uf "$uf" 2>&1)"; then
-      log "ETL $uf ok"
-    else
-      log "ETL $uf falhou; usando os arquivos commitados em main"
-      note="${note:+$note; }ETL $uf falhou"
-      notify "[emendas-rj] ETL $uf falhou" "$(printf '%s\n\n%s' "O export de $uf falhou; essa UF segue com os dados de main." "$etl_output" | tail -c 6000)"
-      git -C "$SRC" checkout -q -- "frontend/data/$lower"
-      git -C "$SRC" clean -q -fd -- "frontend/data/$lower"
-    fi
-    refresh=""
+  # Um processo para as 27 UFs: baixa o zip de novo (--refresh, 32 MB), lê o CSV e o arquivo de
+  # favorecidos uma vez e escreve um snapshot por UF. Câmara, Senado e IBGE ficam em cache.
+  t0="$(date +%s)"
+  all_ufs="$(cd "$SRC/backend" && "$PY" -c 'from app import config; print(" ".join(config.UF_ORDER))')"
+  failed=""
+  if etl_output="$(cd "$SRC/backend" && "$PY" -m app.etl.export_snapshot --uf all --refresh 2>&1)"; then
+    :
+  else
+    failed="$(printf '%s\n' "$etl_output" | sed -n 's/^etl-failed: //p')"
+    [ -n "$failed" ] || failed="$all_ufs"  # caiu antes de separar por UF (zip, CSV): todas falham
+  fi
+  ok=""
+  for uf in $all_ufs; do
+    case " $failed " in *" $uf "*) ;; *) ok="${ok:+$ok,}$uf" ;; esac
   done
+  if [ -n "$ok" ]; then
+    if export_output="$(cd "$SRC/backend" && "$PY" -m app.etl.export_static_frontend --uf "$ok" 2>&1)"; then
+      :
+    else
+      failed="$failed $(printf '%s\n' "$export_output" | sed -n 's/^export-failed: //p')"
+      etl_output="$etl_output
+$export_output"
+    fi
+  fi
+  failed="$(echo $failed)"
+  if [ -n "$failed" ]; then
+    log "ETL falhou em: $failed; essas UFs seguem com os dados commitados em main"
+    note="ETL falhou: $failed"
+    notify "[emendas-rj] ETL falhou: $failed" "$(printf '%s\n\n%s' "Essas UFs seguem com os dados de main; as demais foram atualizadas." "$etl_output" | tail -c 6000)"
+    for uf in $failed; do
+      lower="$(echo "$uf" | tr 'A-Z' 'a-z')"
+      git -C "$SRC" checkout -q -- "frontend/data/$lower" 2>/dev/null || true
+      git -C "$SRC" clean -q -fd -- "frontend/data/$lower"
+    done
+  else
+    log "ETL ok"
+  fi
+  etl_s=$(( $(date +%s) - t0 ))
 fi
 
 key="$rev $(cd "$SRC" && "$PY" - <<'EOF'
 import hashlib, json, pathlib
 h = hashlib.sha256()
-for name in sorted(str(p) for p in pathlib.Path("frontend/data").rglob("*.generated.json")):
+for name in sorted(str(p) for p in pathlib.Path("frontend/data").rglob("*.json")):
     data = json.loads(pathlib.Path(name).read_text(encoding="utf-8"))
     if isinstance(data, dict):
         data.pop("generated_at", None)
@@ -128,18 +141,16 @@ if [ "${FORCE:-0}" != "1" ] && [ -f "$MARK" ] && [ "$(cat "$MARK")" = "$key" ]; 
 fi
 
 log "construindo ($key)"
-(cd "$SRC/frontend" && npm ci --no-audit --no-fund --silent)
-for uf in $UFS; do
-  (cd "$SRC/frontend" && rm -rf out .next && NEXT_PUBLIC_UF="$uf" NEXT_PUBLIC_BASE_PATH="$(base_path "$uf")" npm run build --silent >/dev/null)
-  mkdir -p "$(site_dir "$uf")"
-  if [ "$uf" = "RJ" ]; then
-    # --delete no RJ não pode apagar as subpastas das outras UFs.
-    rsync -a --delete --exclude=/sp/ --chmod=D755,F644 "$SRC/frontend/out/" "$(site_dir "$uf")/"
-  else
-    rsync -a --delete --chmod=D755,F644 "$SRC/frontend/out/" "$(site_dir "$uf")/"
-  fi
-  log "publicado $uf em $(site_dir "$uf")"
-done
+t0="$(date +%s)"
+# Um build com as 27 UFs: as telas buscam os dados (public/data, copiado de frontend/data no
+# prebuild) com fetch, então o bundle não cresce com as UFs.
+(cd "$SRC/frontend" && npm ci --no-audit --no-fund --silent && rm -rf out && NEXT_PUBLIC_BASE_PATH="$BASE_PATH" npm run build --silent >/dev/null)
+build_s=$(( $(date +%s) - t0 ))
+mkdir -p "$DIR/site$BASE_PATH"
+# O out tem todas as UFs; status.json (um por UF) é escrito depois e fica protegido do --delete.
+rsync -a --delete --exclude=status.json --chmod=D755,F644 "$SRC/frontend/out/" "$DIR/site$BASE_PATH/"
+note="${note:+$note; }etl ${etl_s}s, build ${build_s}s"
+log "publicado: etl ${etl_s}s, build ${build_s}s"
 echo "$key" > "$MARK"
 record "publicado" "$note"
 write_status

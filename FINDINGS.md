@@ -1,4 +1,4 @@
-# FINDINGS — emendas parlamentares da bancada fluminense (e da paulista, seção 8)
+# FINDINGS — emendas parlamentares das bancadas federais (RJ primeiro; SP na seção 8; as 27 UFs na seção 9)
 
 Prototype data layer. Written 2026-10-13/14 after running the ETL end to end. Everything below was
 observed, not assumed; numbers come from the files cached under `data/raw/` and from `data/snapshot.json`.
@@ -635,3 +635,81 @@ author/municipality keep 5 favorecidos; municipality entries keep 5 authors and 
 list and per-year favorecido split the Destinos screen does not show; core money in whole reais.
 Result: core 1.77 MB (313 KB gzip) vs RJ 1.74 MB (314 KB gzip); 2,383 favorecido files (11 MB),
 177 author files (3.1 MB), 484 municipality files (2.3 MB), geometry 645 municipalities (288 KB).
+
+## 9. As 27 UFs (added 2026-10-14)
+
+`python -m app.etl.export_snapshot --uf all` reads `EmendasParlamentares.csv` and
+`_PorFavorecido.csv` once and writes one snapshot per UF (19–21 s with caches warm, 0.96 GB peak
+RSS); `export_static_frontend --uf all` writes `frontend/data/<uf>/` (12–31 s; the first run fetched
+25 IBGE meshes and population tables). Warming the roster for the 25 new UFs took ~25 min: the
+national Câmara listings were cached, ~1,900 new `/deputados/{id}` calls at the polite pace.
+
+- Bancada codes: one `71xx` per UF in the CSV, 7102 Acre … 7128 Tocantins (7125 São Paulo, 7126
+  Santa Catarina); all 27 in `config._UFS_RAW`.
+- National coverage: 73,832 individual-amendment rows with an author; every one is kept by exactly
+  one UF. Three changes were needed once all UFs run together (`export_snapshot.resolve_cross_uf`,
+  `match_by_code`):
+  1. **Loose vs strict across UFs.** Vitor Paulo (Câmara 92355) was deputy for RJ in legislatura 54
+     and for DF in 55. The RJ-only run had accepted his 11 rows of 2019 as "loose"; DF matches them
+     strict, so they move to DF (and DF's 4 loose rows of 2015 stay in RJ). RJ goes from 7,797 to
+     7,786 rows.
+  2. **Two homonyms with mandates in the same legislature.** "PEDRO CHAVES" is a GO deputy (Pedro
+     Pinheiro Chaves, SIAFI 3672) and an MS senator (Pedro Chaves dos Santos Filho, SIAFI 3843), both
+     in legislatura 55. A row claimed strict by two UFs goes to the UF that matches more rows of the
+     same SIAFI code (the full civil spelling only matches one of them); 24 rows left GO and 40 left
+     MS, each to its owner.
+  3. **Match by SIAFI code.** 56 rows had a spelling no roster carries ("NELSINHO TRAD FILHO",
+     "LUIZ DO CARMO", "DEP. JOSIVALDO JP", "DEP. ROSEANA SARNEY", an art. 78 form for Maria Goreth);
+     their code already belonged to one matched person, so they follow the code (quality "codigo"):
+     AP 7, GO 18, MA 11, MS 20. `GIM` (5 rows, Gim Argello, DF) needed a name alias
+     (`config.SIAFI_NAME_ALIASES`).
+- Collisions logged by the national index, all resolved by the rules above or by legislature: Bebeto
+  (RJ/BA), Dr. João (RJ/BA), Davidson Magalhães (BA), Pedro Chaves (GO/MS), Mariana Carvalho (MA/RO),
+  Antonio Andrade (MG/TO), Marcondes Gadelha (PB), Silvio Costa and Waldemar Oliveira (PE), Liziane
+  Bayer and Reginete Bispo (RS), Roberto Freire (SP), Pedro Fernandes (MA), Rodolfo Nogueira (MS).
+- Favorecido municipality aliases added for BA, CE, MT, MG, PA, PB, PE, RN, RR, SE, TO (renamed
+  municipalities such as Açu → Assú, Presidente Juscelino → Serra Caiada, Augusto Severo → Campo
+  Grande, Seridó → São Vicente do Seridó, Fortaleza do Tabocão → Tabocão). One name stays unmatched:
+  Boa Esperança do Norte (MT, R$ 1.1 mi), installed after the 2022 census.
+- DF has one municipality (Brasília, 5300108): the map draws one polygon and most DF money is
+  "Distrito Federal inteiro" (localidade `uf`).
+- IBGE `servicodados` started serving only its leaf certificate (Sectigo DV R36) on 2026-10-14;
+  `app/http.py` adds that intermediate (fetched from the AIA URL) and retries.
+- Size: `frontend/data` is 157 MB, 26,551 files (favorecido files 90 MB). Cores 0.35 MB (DF) to
+  1.77 MB (SP). RJ keeps its original limits; the other 26 UFs use the SP limits.
+
+Build: per-UF Next builds took 21 s (RJ) and 34 s (SP) here on 12 cores, about 15 min for 27 and an
+estimated 40+ min on the 4-vCPU droplet. The site is now one Next build: routes `/` (RJ) and
+`/[uf]/…` (generateStaticParams, 195 pages), data copied to `public/data/<uf>/` and fetched by the
+client (`DataGate`, `lib/static-api.ts`) instead of imported. That build takes 44 s here (copying
+the 157 MB of data included).
+
+| UF | roster | casados | linhas | empenhado (R$ mi) | pago+RP (R$ mi) | bancada (R$ mi emp.) | maior autor individual | maior município (pago+RP) | núcleo |
+|---|---:|---:|---:|---:|---:|---:|---|---|---:|
+| RJ | 158 | 130 | 7,786 | 14,485 | 12,409 | 2,381 | Romário (372) | Rio de Janeiro (396.9) | 1.74 MB |
+| AC | 35 | 31 | 1,652 | 5,433 | 3,968 | 2,347 | Sérgio Petecão (361) | Rio Branco (221.1) | 0.41 MB |
+| AL | 40 | 29 | 1,259 | 5,800 | 5,143 | 2,464 | Renan Calheiros (369) | Arapiraca (122.2) | 0.43 MB |
+| AP | 38 | 31 | 1,406 | 5,372 | 4,460 | 2,381 | Davi Alcolumbre (384) | Macapá (327.7) | 0.37 MB |
+| AM | 36 | 30 | 1,262 | 5,636 | 5,190 | 2,557 | Eduardo Braga (368) | Manaus (336.6) | 0.43 MB |
+| BA | 102 | 88 | 5,084 | 13,211 | 11,964 | 2,284 | Otto Alencar (374) | Salvador (75.2) | 1.11 MB |
+| CE | 83 | 61 | 3,073 | 9,195 | 8,610 | 2,507 | Eduardo Girão (292) | Fortaleza (146.1) | 0.81 MB |
+| DF | 38 | 33 | 1,752 | 5,125 | 3,627 | 2,263 | Izalci Lucas (354) | Brasília (7.7) | 0.35 MB |
+| ES | 36 | 33 | 1,868 | 5,914 | 4,944 | 2,356 | Marcos do Val (320) | Serra (155.2) | 0.50 MB |
+| GO | 59 | 51 | 2,575 | 7,608 | 6,764 | 2,378 | Jorge Kajuru (311) | Goiânia (22.2) | 0.66 MB |
+| MA | 85 | 61 | 1,927 | 8,174 | 7,547 | 2,499 | Weverton (369) | Imperatriz (41.6) | 0.67 MB |
+| MT | 46 | 32 | 1,161 | 5,474 | 4,728 | 2,375 | Wellington Fagundes (363) | Cuiabá (245.3) | 0.46 MB |
+| MS | 35 | 28 | 1,476 | 5,451 | 4,253 | 2,391 | Nelsinho Trad (314) | Campo Grande (263.4) | 0.44 MB |
+| MG | 151 | 118 | 7,025 | 16,838 | 15,265 | 2,448 | Rodrigo Pacheco (370) | Muriaé (111.4) | 1.40 MB |
+| PA | 56 | 47 | 2,107 | 7,939 | 7,207 | 2,517 | Jader Barbalho (384) | Belém (53.3) | 0.60 MB |
+| PB | 44 | 33 | 2,236 | 6,421 | 5,637 | 2,345 | Veneziano Vital do Rêgo (353) | Campina Grande (147.0) | 0.57 MB |
+| PR | 93 | 76 | 4,117 | 10,954 | 9,442 | 2,333 | Oriovisto Guimarães (313) | Curitiba (60.7) | 0.96 MB |
+| PE | 77 | 65 | 3,733 | 9,572 | 8,474 | 2,329 | Humberto Costa (360) | Recife (128.0) | 0.79 MB |
+| PI | 37 | 34 | 1,206 | 6,174 | 5,838 | 2,478 | Marcelo Castro (370) | Teresina (44.7) | 0.46 MB |
+| RN | 32 | 28 | 1,773 | 5,495 | 4,907 | 2,400 | Zenaide Maia (358) | Natal (124.0) | 0.45 MB |
+| RS | 84 | 70 | 4,484 | 11,273 | 9,892 | 2,417 | Luis Carlos Heinze (376) | Porto Alegre (102.4) | 0.93 MB |
+| RO | 39 | 31 | 1,182 | 5,405 | 4,601 | 2,341 | Marcos Rogério (376) | Porto Velho (168.7) | 0.41 MB |
+| RR | 40 | 30 | 1,206 | 5,543 | 3,802 | 2,435 | Dr. Hiran (331) | Boa Vista (564.9) | 0.36 MB |
+| SC | 62 | 48 | 2,500 | 7,546 | 6,846 | 2,395 | Esperidião Amin (358) | Joinville (54.3) | 0.71 MB |
+| SP | 211 | 176 | 9,577 | 20,808 | 18,241 | 2,473 | Mara Gabrilli (372) | São Paulo (255.1) | 1.77 MB |
+| SE | 35 | 26 | 1,385 | 5,514 | 4,806 | 2,385 | Laércio Oliveira (350) | Aracaju (171.3) | 0.42 MB |
+| TO | 39 | 26 | 1,368 | 5,349 | 4,620 | 2,287 | Professora Dorinha Seabra (353) | Araguaína (120.7) | 0.46 MB |

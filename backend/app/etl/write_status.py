@@ -1,8 +1,7 @@
 """Escreve o ``status.json`` servido em ``/emendas/status.json``: ultima rodada, ultimo build,
 arquivo do Portal (local e no servidor deles) e as ultimas execucoes.
 
-    python -m app.etl.write_status --uf RJ --runs /root/g0v/runs-emendas.jsonl --out /root/g0v/site/emendas/status.json
-    python -m app.etl.write_status --uf SP --runs /root/g0v/runs-emendas.jsonl --out /root/g0v/site/emendas/sp/status.json
+    python -m app.etl.write_status --uf all --runs /root/g0v/runs-emendas.jsonl --site /root/g0v/site/emendas
 """
 
 from __future__ import annotations
@@ -64,17 +63,39 @@ def build_status(core: dict[str, Any], runs: list[dict[str, Any]], do_probe: boo
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--uf", default=config.DEFAULT_UF, choices=sorted(config.UFS))
-    parser.add_argument("--core", type=Path, default=None, help="padrão: frontend/data/<uf>/static-data.generated.json")
+    parser.add_argument("--uf", default=config.DEFAULT_UF, help="UF, lista separada por virgula ou 'all'")
+    parser.add_argument("--core", type=Path, default=None, help="so com uma UF: padrão frontend/data/<uf>/static-data.generated.json")
     parser.add_argument("--runs", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path, default=None, help="so com uma UF: arquivo de saida")
+    parser.add_argument("--site", type=Path, default=None, help="raiz do site: RJ em <site>/status.json, demais em <site>/<uf>/status.json")
     parser.add_argument("--no-probe", action="store_true")
     args = parser.parse_args(argv)
-    core_path = args.core or config.ROOT / "frontend" / "data" / args.uf.lower() / "static-data.generated.json"
-    core = json.loads(core_path.read_text(encoding="utf-8"))
-    status = build_status(core, read_runs(args.runs), do_probe=not args.no_probe)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(status, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    from .export_snapshot import parse_ufs
+
+    ufs = parse_ufs(args.uf)
+    runs = read_runs(args.runs)
+    remote: dict[str, Any] = {}
+    for sigla in ufs:
+        core_path = (args.core if args.core and len(ufs) == 1 else None) or config.ROOT / "frontend" / "data" / sigla.lower() / "static-data.generated.json"
+        if not core_path.exists():
+            continue
+        core = json.loads(core_path.read_text(encoding="utf-8"))
+        status = build_status(core, runs, do_probe=False)
+        if not args.no_probe:  # o zip e o mesmo para todas as UFs: um HEAD so
+            for source in status["sources"]:
+                url = str(source.get("url", ""))
+                if url.endswith(".zip"):
+                    if url not in remote:
+                        remote[url] = probe(url)
+                    source["remote"] = remote[url]
+        if args.out and len(ufs) == 1:
+            out = args.out
+        elif args.site:
+            out = args.site / "status.json" if sigla == config.DEFAULT_UF else args.site / sigla.lower() / "status.json"
+        else:
+            parser.error("--site ou --out")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(status, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return 0
 
 

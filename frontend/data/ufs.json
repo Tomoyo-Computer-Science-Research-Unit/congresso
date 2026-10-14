@@ -1,0 +1,218 @@
+[
+ {
+  "code": "RJ",
+  "nome": "Rio de Janeiro",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-rj",
+  "bancadaSiafi": "7120"
+ },
+ {
+  "code": "AC",
+  "nome": "Acre",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-ac",
+  "bancadaSiafi": "7102"
+ },
+ {
+  "code": "AL",
+  "nome": "Alagoas",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-al",
+  "bancadaSiafi": "7103"
+ },
+ {
+  "code": "AP",
+  "nome": "Amapá",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-ap",
+  "bancadaSiafi": "7105"
+ },
+ {
+  "code": "AM",
+  "nome": "Amazonas",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-am",
+  "bancadaSiafi": "7104"
+ },
+ {
+  "code": "BA",
+  "nome": "Bahia",
+  "preposicao": "da",
+  "pelo": "pela",
+  "bancadaId": "bancada-ba",
+  "bancadaSiafi": "7106"
+ },
+ {
+  "code": "CE",
+  "nome": "Ceará",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-ce",
+  "bancadaSiafi": "7107"
+ },
+ {
+  "code": "DF",
+  "nome": "Distrito Federal",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-df",
+  "bancadaSiafi": "7108"
+ },
+ {
+  "code": "ES",
+  "nome": "Espírito Santo",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-es",
+  "bancadaSiafi": "7109"
+ },
+ {
+  "code": "GO",
+  "nome": "Goiás",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-go",
+  "bancadaSiafi": "7110"
+ },
+ {
+  "code": "MA",
+  "nome": "Maranhão",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-ma",
+  "bancadaSiafi": "7111"
+ },
+ {
+  "code": "MT",
+  "nome": "Mato Grosso",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-mt",
+  "bancadaSiafi": "7112"
+ },
+ {
+  "code": "MS",
+  "nome": "Mato Grosso do Sul",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-ms",
+  "bancadaSiafi": "7113"
+ },
+ {
+  "code": "MG",
+  "nome": "Minas Gerais",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-mg",
+  "bancadaSiafi": "7114"
+ },
+ {
+  "code": "PA",
+  "nome": "Pará",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-pa",
+  "bancadaSiafi": "7115"
+ },
+ {
+  "code": "PB",
+  "nome": "Paraíba",
+  "preposicao": "da",
+  "pelo": "pela",
+  "bancadaId": "bancada-pb",
+  "bancadaSiafi": "7116"
+ },
+ {
+  "code": "PR",
+  "nome": "Paraná",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-pr",
+  "bancadaSiafi": "7117"
+ },
+ {
+  "code": "PE",
+  "nome": "Pernambuco",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-pe",
+  "bancadaSiafi": "7118"
+ },
+ {
+  "code": "PI",
+  "nome": "Piauí",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-pi",
+  "bancadaSiafi": "7119"
+ },
+ {
+  "code": "RN",
+  "nome": "Rio Grande do Norte",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-rn",
+  "bancadaSiafi": "7121"
+ },
+ {
+  "code": "RS",
+  "nome": "Rio Grande do Sul",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-rs",
+  "bancadaSiafi": "7122"
+ },
+ {
+  "code": "RO",
+  "nome": "Rondônia",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-ro",
+  "bancadaSiafi": "7123"
+ },
+ {
+  "code": "RR",
+  "nome": "Roraima",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-rr",
+  "bancadaSiafi": "7124"
+ },
+ {
+  "code": "SC",
+  "nome": "Santa Catarina",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-sc",
+  "bancadaSiafi": "7126"
+ },
+ {
+  "code": "SP",
+  "nome": "São Paulo",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-sp",
+  "bancadaSiafi": "7125"
+ },
+ {
+  "code": "SE",
+  "nome": "Sergipe",
+  "preposicao": "de",
+  "pelo": "por",
+  "bancadaId": "bancada-se",
+  "bancadaSiafi": "7127"
+ },
+ {
+  "code": "TO",
+  "nome": "Tocantins",
+  "preposicao": "do",
+  "pelo": "pelo",
+  "bancadaId": "bancada-to",
+  "bancadaSiafi": "7128"
+ }
+]

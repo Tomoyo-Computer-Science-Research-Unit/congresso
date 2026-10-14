@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { NAV_ITEMS } from "@/components/SiteNav";
-import { UF, UF_CODES, ufHref } from "@/lib/uf";
+import { UFS, screenFromPath, ufFromPath, ufRoute } from "@/lib/uf";
 
 /** Teclas globais: 1–6 trocam de tela, T inverte o tema nesta visita, U passa para a outra UF na
  * mesma tela. Ignora campos de formulário. */
@@ -19,13 +19,14 @@ export function Hotkeys() {
       const item = NAV_ITEMS.find((candidate) => candidate.key === event.key);
       if (item) {
         event.preventDefault();
-        router.push(item.href);
+        router.push(ufRoute(ufFromPath(pathname), item.href));
         return;
       }
       if (event.key === "u" || event.key === "U") {
         event.preventDefault();
-        const next = UF_CODES[(UF_CODES.indexOf(UF.code) + 1) % UF_CODES.length];
-        window.location.assign(ufHref(next, pathname || "/"));
+        const current = ufFromPath(pathname);
+        const next = UFS[(UFS.indexOf(current) + 1) % UFS.length];
+        router.push(ufRoute(next, screenFromPath(pathname)));
         return;
       }
       if (event.key === "t" || event.key === "T") {

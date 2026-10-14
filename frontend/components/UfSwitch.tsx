@@ -1,23 +1,37 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { UF, UF_CODES, ufHref } from "@/lib/uf";
+import { usePathname, useRouter } from "next/navigation";
+import { UFS, screenFromPath, ufByCode, ufRoute } from "@/lib/uf";
+import { useUf } from "@/lib/use-uf";
 
-/** RJ | SP no canto direito do cabeçalho. Cada UF é um build próprio, então troca por link comum. */
+/** Seletor de UF no canto direito do cabeçalho, à esquerda do tema. Troca de UF na mesma tela. */
 export function UfSwitch() {
+  const router = useRouter();
   const pathname = usePathname();
+  const uf = useUf();
   return (
     <span className="flex shrink-0 items-center">
-      <span className="kbd" title="U alterna a UF">
+      <span className="kbd" title="U passa para a próxima UF">
         U
       </span>
-      <nav className="segmented" aria-label="UF">
-        {UF_CODES.map((code) => (
-          <a key={code} href={ufHref(code, pathname || "/")} aria-current={code === UF.code ? "page" : undefined} title={code === UF.code ? undefined : `Ver ${code}`}>
-            {code}
-          </a>
+      <select
+        className="yearselect"
+        aria-label="UF"
+        value={uf.code}
+        onChange={(event) => {
+          const next = ufByCode(event.target.value);
+          event.currentTarget.blur(); // as teclas da tela voltam a valer depois da troca
+          if (next) {
+            router.push(ufRoute(next, screenFromPath(pathname)));
+          }
+        }}
+      >
+        {UFS.map((item) => (
+          <option key={item.code} value={item.code}>
+            {item.nome}
+          </option>
         ))}
-      </nav>
+      </select>
     </span>
   );
 }

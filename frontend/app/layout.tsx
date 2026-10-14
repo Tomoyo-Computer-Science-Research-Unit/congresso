@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
 import { Archivo, Shippori_Mincho_B1 } from "next/font/google";
-import Link from "next/link";
+import Link from "@/components/UfLink";
 import { Fx } from "@/components/Fx";
 import { Hotkeys } from "@/components/Hotkeys";
 import { SiteNav } from "@/components/SiteNav";
 import { StatusBar } from "@/components/StatusBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UfSwitch } from "@/components/UfSwitch";
+import { DataGate } from "@/components/DataGate";
 import { MoneyProvider } from "@/lib/money";
-import { getMeta } from "@/lib/static-api";
 import { cursorVars } from "@/lib/cursors";
-import { DO_ESTADO, UF } from "@/lib/uf";
+import { DEFAULT_UF, doEstado } from "@/lib/uf";
 import "./globals.css";
 
 const mincho = Shippori_Mincho_B1({ weight: ["500", "700"], subsets: ["latin"], variable: "--font-mincho", display: "swap" });
 const archivo = Archivo({ subsets: ["latin"], weight: "variable", axes: ["wdth"], variable: "--font-archivo", display: "swap" });
 
 export const SITE_NAME = "Emendas";
-const DESCRIPTION = `Emendas parlamentares da bancada federal ${DO_ESTADO} desde 2015: quem enviou, quanto, para onde e em quê, a partir do Portal da Transparência.`;
+const DESCRIPTION = `Emendas parlamentares da bancada federal ${doEstado(DEFAULT_UF)} desde 2015: quem enviou, quanto, para onde e em quê, a partir do Portal da Transparência.`;
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const SITE_URL = `https://g0v.tomoyo.systems${BASE_PATH}`;
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   authors: [{ name: "Tomoyo", url: "https://tomoyo.systems" }],
   creator: "Tomoyo",
   publisher: "Tomoyo",
-  keywords: [UF.nome, "emendas parlamentares", "favorecidos", "orçamento", "Portal da Transparência", "deputados federais", "senadores", "dados públicos"],
+  keywords: [DEFAULT_UF.nome, "emendas parlamentares", "favorecidos", "orçamento", "Portal da Transparência", "deputados federais", "senadores", "dados públicos"],
   alternates: { canonical: "/" },
   twitter: { card: "summary", title: SITE_NAME, description: DESCRIPTION },
   icons: { icon: `${BASE_PATH}/icon.png`, shortcut: `${BASE_PATH}/icon.png`, apple: `${BASE_PATH}/icon.png` },
@@ -50,10 +50,6 @@ const THEME_SCRIPT = `(() => {
 })();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const meta = getMeta();
-  const dataDate = meta.snapshot_generated_at ? new Date(meta.snapshot_generated_at) : new Date(meta.generated_at);
-  const label = `Portal da Transparência · ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "America/Sao_Paulo" }).format(dataDate)}`;
-
   return (
     <html
       lang="pt-BR"
@@ -84,8 +80,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <ThemeToggle />
             </span>
           </header>
-          <main className="app__main">{children}</main>
-          <StatusBar latestLabel={label} />
+          <main className="app__main">
+            <DataGate>{children}</DataGate>
+          </main>
+          <DataGate fallback={<footer className="statusbar" />}>
+            <StatusBar />
+          </DataGate>
         </div>
         </MoneyProvider>
         <Hotkeys />

@@ -8,9 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "playwright test",
-    "test:visual": "playwright test && PW_UF=SP playwright test",
-    "test:visual:sp": "PW_UF=SP playwright test",
-    "build:sp": "NEXT_PUBLIC_UF=SP next build"
+    "test:visual": "playwright test",
+    "stage-data": "node scripts/stage-data.mjs",
+    "predev": "node scripts/stage-data.mjs",
+    "prebuild": "node scripts/stage-data.mjs"
   },
   "dependencies": {
     "next": "^15.0.0",

@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { EmptyState, Panel, Screen, Stat } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
-import { formatInt, type Source } from "@/lib/static-api";
-
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+import { formatInt, getMeta, getSources } from "@/lib/static-api";
+import { statusUrl } from "@/lib/uf";
+import { useUf } from "@/lib/use-uf";
+import type { Source } from "@/lib/static-api";
 
 type Run = { at: string; result: string; detail?: string | null; key?: string | null; duration_s?: number };
 type Remote = { status: number | null; last_modified?: string | null; size_bytes?: number | null; error?: string };
@@ -24,13 +25,18 @@ function mb(value?: number | null): string {
 }
 
 /** Última rodada no servidor, último build, arquivo do Portal e as rodadas recentes; lê o status.json escrito pelo build. */
-export function StatusScreen({ generatedAt, latestYear, sources }: { generatedAt: string; latestYear: number; sources: Source[] }) {
+export function StatusScreen() {
+  const uf = useUf();
+  const meta = getMeta();
+  const generatedAt = meta.generated_at;
+  const latestYear = meta.latest_year;
+  const sources = getSources();
   const [status, setStatus] = useState<Status | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    fetch(`${BASE_PATH}/status.json`, { cache: "no-store" })
+    fetch(statusUrl(uf), { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
       .then((data: Status) => {
         if (alive) {
@@ -45,7 +51,7 @@ export function StatusScreen({ generatedAt, latestYear, sources }: { generatedAt
     return () => {
       alive = false;
     };
-  }, []);
+  }, [uf]);
 
   const files = status?.sources.length ? status.sources : sources;
   const zip = files.find((source) => source.url.endsWith(".zip")) as (Source & { remote?: Remote }) | undefined;

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/UfLink";
 import { EmptyState } from "@/components/ui";
 import { formatBRL } from "@/lib/static-api";
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BarList } from "@/components/BarList";
-import { UF } from "@/lib/uf";
+import { useUf } from "@/lib/use-uf";
 import { useScreenHotkeys } from "@/components/Hotkeys";
 import { EmptyState, Panel, Screen, Segmented, Stat } from "@/components/ui";
 import { YearBars } from "@/components/YearBars";
@@ -34,6 +34,7 @@ const CASAS: Array<{ value: Casa; label: string }> = [
 ];
 
 export function AutoresExplorer() {
+  const UF = useUf();
   const years = getYears();
   const all = getAutores();
   const { mode, real } = useMoneyMode();

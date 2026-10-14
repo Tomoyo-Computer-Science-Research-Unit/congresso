@@ -1,12 +1,13 @@
 /**
- * Camada de dados do site. Tudo vem de `static-data.generated.json` (núcleo) mais um arquivo por
- * autor (`static-autores/<id>`) e por município (`static-destinos/<ibge>`), carregados quando a
- * tela pede. Valores em reais nominais por ano orçamentário; `pago_total` = pago no ano + restos
- * a pagar pagos depois.
+ * Camada de dados do site. Cada UF tem um núcleo (`<basePath>/data/<uf>/static-data.generated.json`)
+ * mais um arquivo por autor (`static-autores/<id>`), por município (`static-destinos/<ibge>`) e por
+ * favorecido, todos JSON estáticos buscados com fetch. `DataGate` carrega o núcleo da UF da página
+ * e o instala com `setCore` antes de renderizar a tela; os getters abaixo leem o núcleo instalado.
+ * Valores em reais nominais por ano orçamentário; `pago_total` = pago no ano + restos a pagar
+ * pagos depois.
  */
 
-import snapshot from "@uf-data/static-data.generated.json";
-import { BANCADA_CURTA } from "@/lib/uf";
+import { bancadaCurta, dataUrl, type UfInfo } from "@/lib/uf";
 
 export type Totais = {
   n: number;
@@ -119,18 +120,58 @@ export type GeoFeatureCollection = {
   features: Array<{ type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: { ibge: string; nome: string } }>;
 };
 
-const DATA = snapshot as unknown as Core;
+export type { Core };
+
+let CURRENT: { uf: UfInfo; core: Core } | null = null;
+const coreCache = new Map<string, Promise<Core>>();
+
+/** Busca (uma vez por UF) o núcleo de dados. */
+export function loadCore(uf: UfInfo): Promise<Core> {
+  let pending = coreCache.get(uf.code);
+  if (!pending) {
+    pending = fetch(dataUrl(uf, "static-data.generated.json")).then((response) => {
+      if (!response.ok) {
+        throw new Error(`núcleo de ${uf.code}: HTTP ${response.status}`);
+      }
+      return response.json() as Promise<Core>;
+    });
+    pending.catch(() => coreCache.delete(uf.code));
+    coreCache.set(uf.code, pending);
+  }
+  return pending;
+}
+
+/** Instala o núcleo da UF que as telas vão ler. Chamado por DataGate antes de renderizar a tela. */
+export function setCore(uf: UfInfo, core: Core): void {
+  CURRENT = { uf, core };
+}
+
+export function currentUf(): UfInfo {
+  if (!CURRENT) {
+    throw new Error("núcleo de dados não carregado");
+  }
+  return CURRENT.uf;
+}
+
+function core(): Core {
+  if (!CURRENT) {
+    throw new Error("núcleo de dados não carregado");
+  }
+  return CURRENT.core;
+}
 
 export type Metric = "empenhado" | "pago_total";
 export const METRICS: Array<{ key: Metric; label: string }> = [
   { key: "empenhado", label: "Empenhado" },
   { key: "pago_total", label: "Pago" }
 ];
-export const TIPO_LABELS: Record<string, string> = {
-  FD: "Individual, finalidade definida",
-  TE: "Individual, transferência especial",
-  BC: BANCADA_CURTA
-};
+export function tipoLabels(uf: UfInfo): Record<string, string> {
+  return {
+    FD: "Individual, finalidade definida",
+    TE: "Individual, transferência especial",
+    BC: bancadaCurta(uf)
+  };
+}
 export const LOCALIDADE_LABELS: Record<string, string> = {
   municipio: "município",
   uf: "estado",
@@ -146,74 +187,74 @@ export const CASA_LABELS: Record<string, string> = { camara: "Câmara", senado: 
 
 export function getMeta() {
   return {
-    generated_at: DATA.generated_at,
-    snapshot_generated_at: DATA.snapshot_generated_at,
-    years: DATA.years,
-    latest_year: DATA.latest_year,
-    totais: DATA.totais
+    generated_at: core().generated_at,
+    snapshot_generated_at: core().snapshot_generated_at,
+    years: core().years,
+    latest_year: core().latest_year,
+    totais: core().totais
   };
 }
 export function getYears(): number[] {
-  return DATA.years;
+  return core().years;
 }
 export function getTotals(): Totais {
-  return DATA.totais;
+  return core().totais;
 }
 export function getByYear(): Record<string, Totais> {
-  return DATA.por_ano;
+  return core().por_ano;
 }
 export function getByTipo(): Record<string, Totais> {
-  return DATA.por_tipo;
+  return core().por_tipo;
 }
 export function getByTipoYear(): Record<string, Record<string, Brief>> {
-  return DATA.por_tipo_ano;
+  return core().por_tipo_ano;
 }
 export function getOutrosDestinos(): Record<string, OutroDestino> {
-  return DATA.outros_destinos;
+  return core().outros_destinos;
 }
 export function getAutores(): Autor[] {
-  return DATA.autores;
+  return core().autores;
 }
 export function getAutor(id: string): Autor | undefined {
-  return DATA.autores.find((autor) => autor.id === id);
+  return core().autores.find((autor) => autor.id === id);
 }
 export function getRosterSemEmendas(): RosterPerson[] {
-  return DATA.roster_sem_emendas;
+  return core().roster_sem_emendas;
 }
 export function getDestinos(): Destino[] {
-  return DATA.destinos;
+  return core().destinos;
 }
 export function getDestino(ibge: string): Destino | undefined {
-  return DATA.destinos.find((destino) => destino.ibge === ibge);
+  return core().destinos.find((destino) => destino.ibge === ibge);
 }
 export function getFuncoes(): Funcao[] {
-  return DATA.funcoes;
+  return core().funcoes;
 }
 export function getFuncao(nome: string): Funcao | undefined {
-  return DATA.funcoes.find((funcao) => funcao.nome === nome);
+  return core().funcoes.find((funcao) => funcao.nome === nome);
 }
 export function getFavorecidos(): Favorecido[] {
-  return DATA.favorecidos ?? [];
+  return core().favorecidos ?? [];
 }
 export function getFavorecido(slug: string): Favorecido | undefined {
-  return DATA.favorecidos?.find((item) => item.slug === slug);
+  return core().favorecidos?.find((item) => item.slug === slug);
 }
 export function getFavorecidosPorTipo() {
-  return DATA.favorecidos_por_tipo ?? {};
+  return core().favorecidos_por_tipo ?? {};
 }
 export function getFavorecidosPorNatureza() {
-  return DATA.favorecidos_por_natureza ?? {};
+  return core().favorecidos_por_natureza ?? {};
 }
 export function getIpca(): Ipca {
-  return DATA.ipca;
+  return core().ipca;
 }
 /** Banco do Brasil aparece como favorecido dos repasses fundo a fundo do SUS; não é destinatário final. */
 export const BB_CODIGO = "00000000000191";
 export function getSources(): Source[] {
-  return DATA.sources;
+  return core().sources;
 }
 export function getStats(): Record<string, unknown> {
-  return DATA.stats;
+  return core().stats;
 }
 
 /** Valor de um grupo num ano ("all" = todos) para a métrica. */
@@ -280,86 +321,50 @@ export function formatInt(value: number | null | undefined): string {
 
 // --- Arquivos sob demanda ------------------------------------------------------------------
 
-const linhasAutor = new Map<string, Linha[]>();
-const linhasDestino = new Map<string, Linha[]>();
-let geo: GeoFeatureCollection | null = null;
-
-export async function loadLinhasAutor(id: string): Promise<Linha[]> {
-  const cached = linhasAutor.get(id);
-  if (cached) {
-    return cached;
+async function fetchJson<T>(file: string): Promise<T> {
+  const response = await fetch(dataUrl(currentUf(), file));
+  if (!response.ok) {
+    throw new Error(`${file}: HTTP ${response.status}`);
   }
-  try {
-    const module = (await import(`@uf-data/static-autores/${id}.generated.json`)) as { default?: Linha[] };
-    const lines = (module.default ?? module) as Linha[];
-    linhasAutor.set(id, lines);
-    return lines;
-  } catch {
-    linhasAutor.set(id, []);
-    return [];
-  }
+  return (await response.json()) as T;
 }
 
-export async function loadLinhasDestino(ibge: string): Promise<Linha[]> {
-  const cached = linhasDestino.get(ibge);
-  if (cached) {
-    return cached;
+
+const lazyCache = new Map<string, Promise<unknown>>();
+
+/** Arquivo sob demanda da UF instalada, guardado por UF + nome (slugs repetem entre UFs). */
+function lazy<T>(file: string, fallback: T): Promise<T> {
+  const key = `${currentUf().code}:${file}`;
+  let pending = lazyCache.get(key) as Promise<T> | undefined;
+  if (!pending) {
+    pending = fetchJson<T>(file).catch(() => fallback);
+    lazyCache.set(key, pending);
   }
-  try {
-    const module = (await import(`@uf-data/static-destinos/${ibge}.generated.json`)) as { default?: Linha[] };
-    const lines = (module.default ?? module) as Linha[];
-    linhasDestino.set(ibge, lines);
-    return lines;
-  } catch {
-    linhasDestino.set(ibge, []);
-    return [];
-  }
+  return pending;
 }
 
-const recebimentosCache = new Map<string, Recebimento[]>();
-
-export async function loadRecebimentos(slug: string): Promise<Recebimento[]> {
-  const cached = recebimentosCache.get(slug);
-  if (cached) {
-    return cached;
-  }
-  try {
-    const module = (await import(`@uf-data/static-favorecidos/${slug}.generated.json`)) as { default?: Recebimento[] };
-    const rows = (module.default ?? module) as Recebimento[];
-    recebimentosCache.set(slug, rows);
-    return rows;
-  } catch {
-    recebimentosCache.set(slug, []);
-    return [];
-  }
+export function loadLinhasAutor(id: string): Promise<Linha[]> {
+  return lazy<Linha[]>(`static-autores/${id}.generated.json`, []);
 }
 
-let favorecidosExtra: Favorecido[] | null = null;
+export function loadLinhasDestino(ibge: string): Promise<Linha[]> {
+  return lazy<Linha[]>(`static-destinos/${ibge}.generated.json`, []);
+}
+
+export function loadRecebimentos(slug: string): Promise<Recebimento[]> {
+  return lazy<Recebimento[]>(`static-favorecidos/${slug}.generated.json`, []);
+}
 
 /**
- * Favorecidos que alguma lista de autor ou município linka mas que ficaram fora do núcleo (em SP o
- * núcleo leva só os 300 maiores). Um arquivo só, carregado quando alguém abre um deles.
+ * Favorecidos que alguma lista de autor ou município linka mas que ficaram fora do núcleo (fora do
+ * RJ o núcleo leva só os 300 maiores). Um arquivo só, carregado quando alguém abre um deles.
  */
-export async function loadFavorecidosExtra(): Promise<Favorecido[]> {
-  if (favorecidosExtra) {
-    return favorecidosExtra;
-  }
-  try {
-    const module = (await import("@uf-data/static-favorecidos-extra.generated.json")) as { default?: Favorecido[] };
-    favorecidosExtra = (module.default ?? module) as Favorecido[];
-  } catch {
-    favorecidosExtra = [];
-  }
-  return favorecidosExtra;
+export function loadFavorecidosExtra(): Promise<Favorecido[]> {
+  return lazy<Favorecido[]>("static-favorecidos-extra.generated.json", []);
 }
 
-export async function loadGeo(): Promise<GeoFeatureCollection> {
-  if (geo) {
-    return geo;
-  }
-  const module = (await import("@uf-data/static-geo.generated.json")) as { default?: GeoFeatureCollection };
-  geo = (module.default ?? module) as GeoFeatureCollection;
-  return geo;
+export function loadGeo(): Promise<GeoFeatureCollection> {
+  return lazy<GeoFeatureCollection>("static-geo.generated.json", { type: "FeatureCollection", features: [] });
 }
 
 /** Série anual completa (anos sem emenda viram zero), para os gráficos de barras. */

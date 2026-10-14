@@ -66,11 +66,14 @@ class Limits:
 
 # SP tem 484 municipios com emenda; com os limites do RJ o nucleo teria 3,3 MB e 2.965 favorecidos.
 # Com estes fica no patamar do RJ (1,7 MB); toda pagina de favorecido continua existindo.
-LIMITS: dict[str, Limits] = {
-    "RJ": Limits(),
-    "SP": Limits(favorecidos_por_lista=5, detalhe_min=None, top_destino=5, nucleo_so_top=True, inteiros=True,
-                 destino_completo=False),
-}
+COMPACTO = Limits(favorecidos_por_lista=5, detalhe_min=None, top_destino=5, nucleo_so_top=True, inteiros=True,
+                  destino_completo=False)
+# RJ guarda os limites com que foi publicado primeiro; as outras 26 UFs usam os de SP.
+LIMITS: dict[str, Limits] = {"RJ": Limits()}
+
+
+def limits_for(uf: str) -> Limits:
+    return LIMITS.get(uf, COMPACTO)
 
 TIPO_CODES = {
     "Emenda Individual - Transferências com Finalidade Definida": "FD",
@@ -289,7 +292,7 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
         linhas[codigo].append({"c": rec["codigo_emenda"], "au": rec["autor_id"], "am": rec["ano_mes"],
                                "v": rec["valor"], "mn": municipio_destino.get(rec["codigo_emenda"])})
 
-    limits = limits or LIMITS.get(uf, Limits())
+    limits = limits or limits_for(uf)
     top = [favorecido_brief(fav) for fav in favorecidos[:limits.top_favorecidos]]
     autores = {autor_id: top_favorecidos(valores, fav_by_codigo, limits.favorecidos_por_lista) for autor_id, valores in por_autor.items()}
     destinos = {ibge: top_favorecidos(valores, fav_by_codigo, limits.favorecidos_por_lista) for ibge, valores in por_destino.items()}
@@ -427,7 +430,7 @@ def export(snapshot_path: Path | None = None, out_dir: Path | None = None, uf: s
     for row in rows:  # municipio da emenda quando e um so; None quando a emenda tem varias localidades
         mn = title_case(row["municipio_destino"]) if row["municipio_destino"] else None
         municipio_destino[row["codigo"]] = mn if row["codigo"] not in municipio_destino or municipio_destino[row["codigo"]] == mn else None
-    limits = LIMITS.get(ufc.sigla, Limits())
+    limits = limits_for(ufc.sigla)
     favorecidos = favorecidos_section(snapshot, names, municipio_destino, ufc.sigla, limits)
     destino_labels = {code: {"nome": info["nome"]} for code, info in population.items()}
     funcao_labels = {name: {"nome": name} for name in por_funcao}
@@ -523,7 +526,8 @@ def export(snapshot_path: Path | None = None, out_dir: Path | None = None, uf: s
         # Destinos sem município: estado, vários municípios, nacional, exterior, outros estados.
         "outros_destinos": {
             key: {
-                "nome": OUTROS_DESTINOS.get(key, key).format(preposicao=ufc.preposicao, nome=ufc.nome),
+                "nome": (("Distrito Federal inteiro" if ufc.sigla == "DF" and key == "uf" else OUTROS_DESTINOS.get(key, key))
+                         .format(preposicao=ufc.preposicao, nome=ufc.nome)),
                 "totais": group.total.json(),
                 "por_ano": anos(group),
                 "autores": top(group.autores, autor_labels),
@@ -545,11 +549,12 @@ def export(snapshot_path: Path | None = None, out_dir: Path | None = None, uf: s
 
     if limits.inteiros:
         core = {key: (value if key in ("ipca", "stats", "sources") else _inteiros(value)) for key, value in core.items()}
+    geo = municipality_geometries(names, ufc)  # rede antes de escrever: falha aqui nao deixa a UF pela metade
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "static-data.generated.json").write_text(_dumps(core), encoding="utf-8")
     extra = _inteiros(favorecidos["extra"]) if limits.inteiros else favorecidos["extra"]
     (out_dir / "static-favorecidos-extra.generated.json").write_text(_dumps(extra), encoding="utf-8")
-    (out_dir / "static-geo.generated.json").write_text(_dumps(municipality_geometries(names, ufc)), encoding="utf-8")
+    (out_dir / "static-geo.generated.json").write_text(_dumps(geo), encoding="utf-8")
     _write_many(out_dir / "static-autores", linhas_autor)
     _write_many(out_dir / "static-destinos", linhas_destino)
     _write_many(out_dir / "static-favorecidos", favorecidos["arquivos"], key=lambda line: (line["am"], line["c"]), reverse=True)
@@ -604,19 +609,46 @@ def _dumps(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
+def write_ufs_index(path: Path = FRONTEND_DATA / "ufs.json") -> list[dict[str, Any]]:
+    """Lista unica de UFs para o frontend (seletor, textos): ordem do site, sigla, nome, preposicao."""
+
+    ufs = []
+    for sigla in config.UF_ORDER:
+        u = config.UFS[sigla]
+        ufs.append({"code": sigla, "nome": u.nome, "preposicao": u.preposicao, "pelo": u.pelo,
+                    "bancadaId": u.bancada_id, "bancadaSiafi": u.bancada_codigo})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(ufs, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return ufs
+
+
 def main(argv: list[str] | None = None) -> int:
+    from .export_snapshot import parse_ufs
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--uf", default=config.DEFAULT_UF, choices=sorted(config.UFS), help="UF da bancada (padrão RJ)")
-    parser.add_argument("--snapshot", type=Path, default=None, help="padrão: o snapshot da UF")
-    parser.add_argument("--out", type=Path, default=None, help="padrão: frontend/data/<uf>")
+    parser.add_argument("--uf", default=config.DEFAULT_UF, help="UF, lista separada por virgula ou 'all' (padrão RJ)")
+    parser.add_argument("--snapshot", type=Path, default=None, help="so com uma UF: padrão o snapshot da UF")
+    parser.add_argument("--out", type=Path, default=None, help="so com uma UF: padrão frontend/data/<uf>")
     args = parser.parse_args(argv)
-    core = export(args.snapshot, args.out, args.uf)
-    fs = core["stats"]["favorecidos_export"]
-    print(f"[{core['uf']}] {len(core['autores'])} autores, {len(core['destinos'])} destinos, {len(core['funcoes'])} funcoes, anos {core['years'][0]}-{core['years'][-1]}")
-    print(f"favorecidos: {fs['favorecidos']} ({fs['com_detalhe']} com arquivo), top {len(core['favorecidos'])}, "
-          f"ipca base {core['ipca']['base_month']} fator {core['years'][0]}={core['ipca']['factors'].get(str(core['years'][0]))}")
-    if fs["municipios_uf_sem_ibge"]:
-        print(f"municipios {core['uf']} sem IBGE:", fs["municipios_uf_sem_ibge"])
+    ufs = parse_ufs(args.uf)
+    write_ufs_index()
+    failed: list[str] = []
+    for sigla in ufs:
+        try:
+            single = len(ufs) == 1
+            core = export(args.snapshot if single else None, args.out if single else None, sigla)
+        except Exception as exc:  # noqa: BLE001 - uma UF que falha nao derruba as outras
+            print(f"[{sigla}] FALHOU {type(exc).__name__}: {exc}")
+            failed.append(sigla)
+            continue
+        fs = core["stats"]["favorecidos_export"]
+        print(f"[{core['uf']}] {len(core['autores'])} autores, {len(core['destinos'])} destinos, {len(core['funcoes'])} funcoes, "
+              f"anos {core['years'][0]}-{core['years'][-1]}; favorecidos {fs['favorecidos']} ({fs['com_detalhe']} com arquivo)")
+        if fs["municipios_uf_sem_ibge"]:
+            print(f"[{core['uf']}] municipios sem IBGE:", fs["municipios_uf_sem_ibge"])
+    if failed:
+        print("export-failed:", " ".join(failed))
+        return 2
     return 0
 
 

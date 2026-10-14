@@ -1,7 +1,8 @@
 # Emendas
 
-Emendas parlamentares da bancada federal, da Tomoyo, dentro do g0v.tomoyo.systems: Rio de Janeiro e
-São Paulo, um build do mesmo site por UF.
+Emendas parlamentares da bancada federal, da Tomoyo, dentro do g0v.tomoyo.systems: as 27 UFs num
+site só. O RJ fica na raiz, as demais em /emendas/<uf>/; o seletor de UF do cabeçalho troca de UF
+na mesma tela.
 
 O ETL baixa o arquivo "Emendas parlamentares" do Portal da Transparência (emendas e favorecidos),
 define a bancada pelas APIs da Câmara e do Senado, casa os autores do SIAFI com essa lista e publica
@@ -10,7 +11,7 @@ função orçamentária e por favorecido. "Pago" soma o pago no ano com restos a
 Valores aparecem corrigidos pelo IPCA (média anual para o mês-base, série SIDRA 1737) no modelo do
 gwern.net: o corrigido em primeiro plano, o nominal e o ano em subscrito; a tecla N mostra nominal.
 
-Sites: https://g0v.tomoyo.systems/emendas/ (RJ) e https://g0v.tomoyo.systems/emendas/sp/ (SP).
+Site: https://g0v.tomoyo.systems/emendas/ (RJ), https://g0v.tomoyo.systems/emendas/sp/, …/mg/, …/df/ etc.
 
 ## Dados
 
@@ -29,16 +30,20 @@ bancadas de outros estados. Detalhes, contagens reais e ressalvas em `FINDINGS.m
 ```text
 backend/app/
   parsers/emendas.py          leitura do CSV (latin-1, números brasileiros, classificação da localidade)
-  config.py                   constantes por UF (UFS: código IBGE, bancada SIAFI 7120/7125, aliases de município)
+  config.py                   as 27 UFs (UFS: código IBGE, bancada SIAFI 7102–7128, aliases de município), UF_ORDER
   roster.py                   bancada da UF a partir da Câmara e do Senado
   match.py                    autor do SIAFI -> pessoa da bancada (nome normalizado + legislatura + homônimos)
-  etl/export_snapshot.py      data/snapshot.json (RJ) ou data/snapshot-sp.json: linhas da UF, agregados, auditoria
+  etl/export_snapshot.py      --uf all: lê o zip uma vez e escreve data/snapshot.json (RJ) e data/snapshot-<uf>.json;
+                              resolve linhas que duas UFs reclamam e casa pelo código SIAFI o que o nome não casou
   etl/export_static_frontend.py  frontend/data/<uf>: núcleo, um arquivo por autor, um por município, geometrias
 frontend/
-  data/<uf>/static-data.generated.json   ~1,7 MB: autores, destinos, funções, agregados, fontes
+  data/ufs.json               lista de UFs para o site (gerada do config.py)
+  data/<uf>/static-data.generated.json   núcleo, 0,35–1,8 MB: autores, destinos, funções, agregados, fontes
   data/<uf>/static-autores/<id>, static-destinos/<ibge>, static-favorecidos/<slug>,
-    static-favorecidos-extra   sob demanda; o build lê a pasta da UF pelo alias "@uf-data"
-  lib/uf.ts                   textos por UF (nome, preposição, bancada, exemplo de homônimo)
+    static-favorecidos-extra   sob demanda
+  scripts/stage-data.mjs      copia data/<uf> para public/data/<uf> antes de dev/build; o site busca com fetch
+  app/[uf]/                   as mesmas telas para as 26 UFs fora do RJ (generateStaticParams)
+  lib/uf.ts, components/DataGate.tsx   UF do caminho; carrega o núcleo da UF antes da tela
   lib/money.tsx               IPCA, modo real/nominal e o componente Money (padrão gwern)
   app/status                  última rodada, último build, arquivo do Portal; lê status.json do servidor
   app/, components/           Next.js App Router, Tailwind com tokens da tomoyo.systems, Recharts
@@ -49,24 +54,22 @@ deploy/build-site.sh          roda no servidor, por cron, uma vez por dia
 
 ```bash
 cd backend && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
-.venv/bin/python -m app.etl.export_snapshot --refresh  # RJ; ~10 min na primeira vez (APIs da Câmara)
-.venv/bin/python -m app.etl.export_static_frontend
-.venv/bin/python -m app.etl.export_snapshot --uf SP     # mesmo zip, sem baixar de novo
-.venv/bin/python -m app.etl.export_static_frontend --uf SP
-cd ../frontend && npm ci && npm run dev                 # RJ; NEXT_PUBLIC_UF=SP npm run dev para SP
+.venv/bin/python -m app.etl.export_snapshot --uf all --refresh  # ~20 s com cache; ~25 min na primeira vez (Câmara)
+.venv/bin/python -m app.etl.export_static_frontend --uf all       # ~15 s com o IBGE em cache
+cd ../frontend && npm ci && npm run dev
 ```
 
-Gates: `cd backend && .venv/bin/python -m pytest -q`; `cd frontend && npx tsc --noEmit && npm run build && npm run build:sp && npm run test:visual`
-(`test:visual` roda o Playwright do RJ e depois o de SP, `PW_UF=SP`).
+Gates: `cd backend && .venv/bin/python -m pytest -q`; `cd frontend && npx tsc --noEmit && npm run build && npm run test:visual`.
 
 ## Deploy
 
-O RJ vive em `g0v.tomoyo.systems/emendas` e SP em `g0v.tomoyo.systems/emendas/sp`, no mesmo nginx
-estático do Perdeu, Playboy (droplet `mail.tomoyo.systems`, `/root/g0v/site/emendas` e
-`/root/g0v/site/emendas/sp`; o rsync do RJ exclui `/sp/`). O cron roda `/root/g0v/build-emendas.sh` (cópia de
+O site vive em `g0v.tomoyo.systems/emendas` (RJ na raiz, demais UFs em `/emendas/<uf>/`, dados em
+`/emendas/data/<uf>/`), no mesmo nginx estático do Perdeu, Playboy (droplet `mail.tomoyo.systems`,
+`/root/g0v/site/emendas`). Um build Next só gera as 27 UFs; o rsync protege os `status.json` por UF. O cron roda `/root/g0v/build-emendas.sh` (cópia de
 `deploy/build-site.sh`, que se atualiza sozinha a partir de `main`) todo dia às 06:53 de Brasília:
-puxa `main`, baixa o zip de novo, regenera os dados das duas UFs (a falha de uma não derruba a
-outra) e, se algo mudou, constrói e publica as duas. Cada
+puxa `main`, baixa o zip de novo, regenera os dados das 27 UFs (uma UF que falha fica com os dados
+de main; as outras seguem) e, se algo mudou, constrói e publica. Tempo de ETL e de build vai no
+registro da rodada. Cada
 rodada entra em `/root/g0v/runs-emendas.jsonl` e no `status.json` da página `/status`; falhas avisam
 por e-mail. Para publicar na hora, depois de um push:
 

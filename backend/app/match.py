@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from .config import legislatura_autora
+from .config import SIAFI_NAME_ALIASES, legislatura_autora
 from .names import normalize, split_siafi_author
 from .roster import Pessoa, Roster
 
@@ -57,6 +57,7 @@ class Matcher:
             if not cand:
                 continue
             key = normalize(cand)
+            key = SIAFI_NAME_ALIASES.get(key, key)
             people = self.index.get(key, [])
             strict = [p for p in people if leg in p.legislaturas]
             others = self._others_nationwide(key)
