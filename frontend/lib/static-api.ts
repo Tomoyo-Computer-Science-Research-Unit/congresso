@@ -7,7 +7,7 @@
  * pagos depois.
  */
 
-import { bancadaCurta, dataUrl, type UfInfo } from "@/lib/uf";
+import { bancadaCurta, commonDataUrl, dataUrl, type UfInfo } from "@/lib/uf";
 
 export type Totais = {
   n: number;
@@ -373,4 +373,232 @@ export function yearPoints(porAno: Record<string, Brief>, years: number[]): Arra
     const brief = porAno[String(year)];
     return { year, empenhado: brief?.empenhado ?? 0, pago_total: brief?.pago_total ?? 0, n: brief?.n ?? 0 };
   });
+}
+
+// --- Votações e presença -------------------------------------------------------------------
+//
+// Comuns às 27 UFs (data/votacoes/): o índice de todas as votações nominais de plenário da Câmara e
+// do Senado desde 2015-02-01, o detalhe por ano e as ementas. Por UF: a bancada com faltas por mês
+// (static-bancada), o voto da bancada em cada votação do ano (static-votos/<ano>) e a lista de votos
+// de cada parlamentar (static-parlamentares/<id>).
+
+/**
+ * Voto ou situação de um parlamentar numa votação. S sim, N não, A abstenção, O obstrução,
+ * P presidindo, X presente sem voto, F ausente, J ausência justificada (Senado), "." fora do mandato.
+ */
+export type VotoCode = "S" | "N" | "A" | "O" | "P" | "V" | "X" | "F" | "J" | ".";
+export const VOTO_LABELS: Record<string, string> = {
+  S: "Sim",
+  N: "Não",
+  A: "Abstenção",
+  O: "Obstrução",
+  P: "Presidindo",
+  V: "Votou",
+  X: "Presente, sem voto",
+  F: "Ausente",
+  J: "Ausência justificada"
+};
+export const ORIENTACAO_LABELS: Record<string, string> = { S: "Sim", N: "Não", L: "Liberado", O: "Obstrução", A: "Abstenção" };
+export const TIPO_VOTACAO_LABELS: Record<string, string> = { texto: "Texto", destaque: "Emenda ou destaque", requerimento: "Requerimento" };
+export type Casa2 = "camara" | "senado";
+export type VotacaoIdx = {
+  id: string;
+  casa: Casa2;
+  data: string;
+  titulo: string;
+  tipo: string;
+  resultado: "aprovado" | "rejeitado" | null;
+  sim: number;
+  nao: number;
+  abst: number;
+  obst: number;
+  governo: string | null;
+  prop: string | null;
+};
+export type VotacaoDetalhe = {
+  ob: string;
+  fr: string;
+  h: string | null;
+  f: string;
+  pp: Record<string, [number, number, number, number]>;
+  or: Record<string, string>;
+  cnt: Record<string, number>;
+};
+export type BancadaPessoa = { id: string; nome: string; partido: string | null; casas: Casa2[]; autor: boolean };
+/** Faltas de um mês: [faltas, ausências justificadas, sessões com o parlamentar em exercício]. */
+export type PresencaCelula = [number, number, number];
+export type Bancada = { pessoas: BancadaPessoa[]; presenca: Record<string, Record<string, PresencaCelula>> };
+export type VotosAno = { m: Record<Casa2, string[]>; v: Record<string, string> };
+/** [id da votação, voto, marcas]; marcas: 1 contra a maioria, 2 contra o partido, 4 contra o governo, 8 governo orientou, 16 partido com maioria. */
+export type VotoLinha = [string, VotoCode, number];
+export const FLAG = { contraMaioria: 1, contraPartido: 2, contraGoverno: 4, governoOrientou: 8, partidoMaioria: 16 } as const;
+export type VotacoesMeta = {
+  generated_at: string;
+  inicio: string;
+  anos: number[];
+  votacoes: Record<Casa2, Record<string, number>>;
+  sessoes: Record<Casa2, Record<string, number>>;
+  com_orientacao_governo: Record<Casa2, number>;
+  votos: number;
+  sources: Source[];
+  stats: { senado_descartadas?: { total: number; abertas: number; por_ano: Record<string, number>; ultima: string | null }; camara_votos_completados?: Record<string, number> };
+};
+
+const commonCache = new Map<string, Promise<unknown>>();
+function common<T>(file: string, fallback: T): Promise<T> {
+  let pending = commonCache.get(file) as Promise<T> | undefined;
+  if (!pending) {
+    pending = fetch(commonDataUrl(file))
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`${file}: HTTP ${response.status}`);
+        }
+        return response.json() as Promise<T>;
+      })
+      .catch(() => fallback);
+    commonCache.set(file, pending);
+  }
+  return pending;
+}
+
+type IdxRow = [string, string, string, string, string | null, number, number, number, number, string | null, string | null];
+let indexPromise: Promise<VotacaoIdx[]> | null = null;
+/** Todas as votações, da mais recente para a mais antiga. */
+export function loadVotacoesIndex(): Promise<VotacaoIdx[]> {
+  if (!indexPromise) {
+    indexPromise = common<IdxRow[]>("index.generated.json", []).then((rows) =>
+      rows.map(([id, data, titulo, tipo, r, sim, nao, abst, obst, governo, prop]) => ({
+        id,
+        casa: id.startsWith("s:") ? "senado" : "camara",
+        data,
+        titulo,
+        tipo,
+        resultado: r === "a" ? "aprovado" : r === "r" ? "rejeitado" : null,
+        sim,
+        nao,
+        abst,
+        obst,
+        governo,
+        prop
+      }))
+    );
+  }
+  return indexPromise;
+}
+export function loadVotacoesAno(ano: string | number): Promise<Record<string, VotacaoDetalhe>> {
+  return common<Record<string, VotacaoDetalhe>>(`${ano}.generated.json`, {});
+}
+export function loadProposicoes(): Promise<Record<string, [string, string]>> {
+  return common<Record<string, [string, string]>>("proposicoes.generated.json", {});
+}
+export function loadVotacoesMeta(): Promise<VotacoesMeta | null> {
+  return common<VotacoesMeta | null>("meta.generated.json", null);
+}
+export function loadBancada(): Promise<Bancada> {
+  return lazy<Bancada>("static-bancada.generated.json", { pessoas: [], presenca: {} });
+}
+export function loadVotosAno(ano: string | number): Promise<VotosAno> {
+  return lazy<VotosAno>(`static-votos/${ano}.generated.json`, { m: { camara: [], senado: [] }, v: {} });
+}
+type ParlamentarFile = Partial<Record<Casa2, [number, string, string]>>;
+const FLAG_CHARS = "0123456789abcdefghijklmnopqrstuv";
+type Ordem = { casas: Record<Casa2, string[]>; rank: Map<string, number> };
+let ordinalPromise: Promise<Ordem> | null = null;
+/** Votações de cada casa da mais antiga para a mais recente: a posição é o índice nos arquivos por
+ * parlamentar. `rank` é a posição no índice (mais recente primeiro). */
+function ordinais(): Promise<Ordem> {
+  if (!ordinalPromise) {
+    ordinalPromise = loadVotacoesIndex().then((index) => {
+      const casas: Record<Casa2, string[]> = { camara: [], senado: [] };
+      for (let i = index.length - 1; i >= 0; i -= 1) {
+        casas[index[i].casa].push(index[i].id);
+      }
+      return { casas, rank: new Map(index.map((item, position) => [item.id, position])) };
+    });
+  }
+  return ordinalPromise;
+}
+/** Votos de um parlamentar, da votação mais recente para a mais antiga. */
+export function loadVotosParlamentar(id: string): Promise<VotoLinha[]> {
+  return Promise.all([lazy<ParlamentarFile>(`static-parlamentares/${id}.generated.json`, {}), ordinais()]).then(([file, ordem]) => {
+    const rows: VotoLinha[] = [];
+    for (const casa of ["camara", "senado"] as Casa2[]) {
+      const entry = file[casa];
+      if (!entry) continue;
+      const [start, codes, flags] = entry;
+      for (let i = 0; i < codes.length; i += 1) {
+        const code = codes[i] as VotoCode;
+        const vid = ordem.casas[casa][start + i];
+        if (code !== "." && vid) {
+          rows.push([vid, code, FLAG_CHARS.indexOf(flags[i] ?? "0")]);
+        }
+      }
+    }
+    return rows.sort((a, b) => (ordem.rank.get(a[0]) ?? 0) - (ordem.rank.get(b[0]) ?? 0));
+  });
+}
+
+/** "Sim" ou "Não" venceu: aprovado em verde, rejeitado em vermelho, sem resultado em cinza. */
+export function resultadoClass(resultado: string | null): string {
+  return resultado === "aprovado" ? "voto-sim" : resultado === "rejeitado" ? "voto-nao" : "faint";
+}
+export function votoClass(code: string): string {
+  return code === "S" ? "voto-sim" : code === "N" ? "voto-nao" : "faint";
+}
+export function formatDate(iso: string): string {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+}
+export function formatPct(value: number | null | undefined): string {
+  return value === null || value === undefined || !Number.isFinite(value) ? "–" : `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(value * 100)}%`;
+}
+/** Ementa em caixa de frase (as da Câmara vêm às vezes em caixa alta). */
+export function ementaCase(text: string | null | undefined): string {
+  const value = text ?? "";
+  return value && value === value.toUpperCase() ? value.toLowerCase().replace(/^\p{L}/u, (c) => c.toUpperCase()) : value;
+}
+
+/** Resumo dos votos de um parlamentar num recorte. */
+export type ResumoVotos = {
+  votacoes: number;
+  votou: number;
+  presidindo: number;
+  sim: number;
+  nao: number;
+  comMaioria: number;
+  simOuNao: number;
+  contraPartido: number;
+  partidoBase: number;
+  contraGoverno: number;
+  governoBase: number;
+  ausente: number;
+  justificada: number;
+  presenteSemVoto: number;
+};
+export function resumoVotos(linhas: VotoLinha[]): ResumoVotos {
+  const r: ResumoVotos = { votacoes: 0, votou: 0, presidindo: 0, sim: 0, nao: 0, comMaioria: 0, simOuNao: 0, contraPartido: 0, partidoBase: 0, contraGoverno: 0, governoBase: 0, ausente: 0, justificada: 0, presenteSemVoto: 0 };
+  for (const [, code, flags] of linhas) {
+    r.votacoes += 1;
+    if (code === "S" || code === "N" || code === "A" || code === "O") {
+      r.votou += 1;
+    }
+    if (code === "P") r.presidindo += 1;
+    if (code === "F") r.ausente += 1;
+    if (code === "J") r.justificada += 1;
+    if (code === "X") r.presenteSemVoto += 1;
+    if (code === "S" || code === "N") {
+      r.simOuNao += 1;
+      if (code === "S") r.sim += 1;
+      else r.nao += 1;
+      if (!(flags & FLAG.contraMaioria)) r.comMaioria += 1;
+      if (flags & FLAG.partidoMaioria) {
+        r.partidoBase += 1;
+        if (flags & FLAG.contraPartido) r.contraPartido += 1;
+      }
+      if (flags & FLAG.governoOrientou) {
+        r.governoBase += 1;
+        if (flags & FLAG.contraGoverno) r.contraGoverno += 1;
+      }
+    }
+  }
+  return r;
 }

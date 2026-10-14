@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // Um build com as 27 UFs, servido na raiz (NEXT_PUBLIC_BASE_PATH vazio): RJ em "/", as demais em
-// "/<uf>/". O deploy usa /emendas.
+// "/<uf>/". O deploy usa /congresso.
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,

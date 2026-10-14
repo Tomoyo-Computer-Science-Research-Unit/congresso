@@ -10,8 +10,8 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ uf: string }> }): Promise<Metadata> {
   const uf = ufByCode((await params).uf) ?? DEFAULT_UF;
-  const description = `Emendas parlamentares da bancada federal ${doEstado(uf)} desde 2015: quem enviou, quanto, para onde e em quê, a partir do Portal da Transparência.`;
-  return { description, keywords: [uf.nome, "emendas parlamentares", "favorecidos", "orçamento", "Portal da Transparência"], alternates: { canonical: `/${uf.code.toLowerCase()}/` } };
+  const description = `A bancada federal ${doEstado(uf)} desde 2015: emendas parlamentares (quem enviou, quanto, para onde e em quê), votações nominais e faltas em plenário, a partir do Portal da Transparência, da Câmara e do Senado.`;
+  return { description, keywords: [uf.nome, "emendas parlamentares", "votações nominais", "presença", "favorecidos", "orçamento", "Portal da Transparência"], alternates: { canonical: `/${uf.code.toLowerCase()}/` } };
 }
 
 export default function UfLayout({ children }: { children: React.ReactNode }) {

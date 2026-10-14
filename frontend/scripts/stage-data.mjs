@@ -1,4 +1,4 @@
-// Copia os dados gerados pelo ETL (data/<uf>/) para public/data/<uf>/, de onde o site os busca com
+// Copia os dados gerados pelo ETL (data/<uf>/ e data/votacoes/) para public/data/, de onde o site os busca com
 // fetch. public/data não vai para o git; data/ vai. Roda antes de `next dev` e `next build`.
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -26,5 +26,9 @@ for (const uf of readdirSync(src)) {
     mkdirSync(join(root, "public", uf), { recursive: true });
     cpSync(join(root, "public", "status.json"), join(root, "public", uf, "status.json"));
   }
+}
+// Votações e ementas comuns às 27 UFs (data/votacoes, escrito por app.etl.export_votos).
+if (existsSync(join(src, "votacoes"))) {
+  cpSync(join(src, "votacoes"), join(dest, "votacoes"), { recursive: true });
 }
 console.log(`stage-data: ${n} UFs em public/data`);

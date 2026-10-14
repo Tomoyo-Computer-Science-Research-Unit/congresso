@@ -14,7 +14,18 @@ const HINTS: Record<string, Array<[string, string]>> = {
     ["↑↓", "autor"],
     ["←→", "ano"],
     ["m", "métrica"],
+    ["c", "casa"],
+    ["v", "lista"]
+  ],
+  "/votacoes": [
+    ["↑↓", "votação"],
+    ["←→", "ano"],
     ["c", "casa"]
+  ],
+  "/presenca": [
+    ["←→", "ano"],
+    ["c", "casa"],
+    ["o", "ordem"]
   ],
   "/destinos": [
     ["↑↓", "município"],
@@ -57,7 +68,7 @@ export function StatusBar() {
           {real ? "nominal" : `R$ de ${baseMonthLabel()}`}
         </span>
         <span>
-          <span className="kbd">1–6</span>telas
+          <span className="kbd">1–8</span>telas
         </span>
         <span>
           <span className="kbd">t</span>tema

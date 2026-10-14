@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { NAV_ITEMS } from "@/components/SiteNav";
 import { UFS, screenFromPath, ufFromPath, ufRoute } from "@/lib/uf";
 
-/** Teclas globais: 1–6 trocam de tela, T inverte o tema nesta visita, U passa para a outra UF na
+/** Teclas globais: 1–8 trocam de tela, T inverte o tema nesta visita, U passa para a outra UF na
  * mesma tela. Ignora campos de formulário. */
 export function Hotkeys() {
   const router = useRouter();

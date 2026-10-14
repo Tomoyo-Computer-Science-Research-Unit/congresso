@@ -1,0 +1,6 @@
+﻿"id";"uri";"data";"dataHoraRegistro";"idOrgao";"uriOrgao";"siglaOrgao";"idEvento";"uriEvento";"aprovacao";"votosSim";"votosNao";"votosOutros";"descricao";"ultimaAberturaVotacao_dataHoraRegistro";"ultimaAberturaVotacao_descricao";"ultimaApresentacaoProposicao_dataHoraRegistro";"ultimaApresentacaoProposicao_descricao";"ultimaApresentacaoProposicao_idProposicao";"ultimaApresentacaoProposicao_uriProposicao"
+"100-1";"";"2023-03-14";"2023-03-14T20:10:00";"180";"";"PLEN";"9001";"";"1";"3";"1";"0";"Aprovado o Projeto de Lei nº 1 de 2023. Sim: 3; não: 1; total: 4.";"";"Votação em turno único.";"";"";"";""
+"100-2";"";"2023-03-14";"2023-03-14T20:30:00";"180";"";"PLEN";"9001";"";"0";"1";"2";"1";"Rejeitado o Requerimento. Sim: 1; não: 2; abstenção: 1; total: 4.";"";"Votação do Requerimento do Dep. Fulano que solicita a retirada de pauta.";"";"";"";""
+"100-3";"";"2023-03-15";"2023-03-15T10:00:00";"2003";"";"CCJC";"9002";"";"1";"5";"0";"0";"Aprovado o Parecer.";"";"";"";"";"";""
+"100-4";"";"2023-03-15";"2023-03-15T18:00:00";"180";"";"PLEN";"9003";"";"1";"0";"0";"0";"Aprovado o Requerimento de Urgência.";"";"";"";"";"";""
+"100-5";"";"2023-03-14";"2023-03-14T21:00:00";"180";"";"PLEN";"9001";"";"1";"1";"0";"0";"Aprovada a Emenda nº 2. Sim: 1; não: 0; total: 1.";"";"Votação da Emenda nº 2.";"";"";"";""

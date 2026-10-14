@@ -1,4 +1,4 @@
-# FINDINGS — emendas parlamentares das bancadas federais (RJ primeiro; SP na seção 8; as 27 UFs na seção 9)
+# FINDINGS — emendas parlamentares das bancadas federais (RJ primeiro; SP na seção 8; as 27 UFs na seção 9; votações e presença na seção 10)
 
 Prototype data layer. Written 2026-10-13/14 after running the ETL end to end. Everything below was
 observed, not assumed; numbers come from the files cached under `data/raw/` and from `data/snapshot.json`.
@@ -713,3 +713,119 @@ the 157 MB of data included).
 | SP | 211 | 176 | 9,577 | 20,808 | 18,241 | 2,473 | Mara Gabrilli (372) | São Paulo (255.1) | 1.77 MB |
 | SE | 35 | 26 | 1,385 | 5,514 | 4,806 | 2,385 | Laércio Oliveira (350) | Aracaju (171.3) | 0.42 MB |
 | TO | 39 | 26 | 1,368 | 5,349 | 4,620 | 2,287 | Professora Dorinha Seabra (353) | Araguaína (120.7) | 0.46 MB |
+
+## 10. Votações nominais e presença (added 2026-10-14)
+
+`python -m app.etl.export_votos --uf all` (code in `app/votos/`). First run on 2026-10-14: ~45 min
+to download the Câmara files at the server's pace, ~6 min for 1,272 deputy histories; a later run
+with the cache warm takes 200 s with the current year downloaded again, 37 s with `--offline`.
+
+### 10.1 Sources, checked live on 2026-10-14
+
+- **Câmara, yearly bulk files** `https://dadosabertos.camara.leg.br/arquivos/<nome>/csv/<nome>-<ano>.csv`
+  for `votacoes`, `votacoesVotos`, `votacoesOrientacoes`, `votacoesProposicoes`, `eventos`,
+  `eventosOrgaos`, `eventosPresencaDeputados` (all exist for 2015–2026; `eventosPresenca` does not).
+  UTF-8 with BOM, `;`, all fields quoted. 843 MB for 12 years; `votacoesVotos-2021.csv` alone is
+  107 MB. Every file has `Last-Modified` of the same day, past years included: the Câmara
+  regenerates them daily, so "cache past years" is our choice, not a property of the files.
+- **The server cuts every response after ~17 s** (curl exit 18, a 37.6 MB file stops at 6.4 MB
+  mid-row, no HTTP error). A first pass of `curl` left files that looked complete and were not
+  (`votacoesVotos-2023.csv`: 77 of 287 plenário votações). It honours `Range`
+  (`206`, `content-range: bytes 1000-2000/37588311`), so `votos/fetch.py` resumes until the size
+  equals Content-Length and refuses the file otherwise.
+- **Câmara API v2**: `/deputados/{id}/historico` for each deputy (in office or not on each date);
+  `/proposicoes/{id}` for 8 proposições the bulk files do not describe; `/votacoes/{id}/votos` is
+  wired for plenário votações with a placar and no rows in `votacoesVotos`: 0 such cases in
+  2015–2026.
+- **Senado** `GET /dadosabertos/votacao?dataInicio=<ano>-01-01&dataFim=<ano>-12-31` (JSON, one year per
+  request; replaces `/plenario/lista/votacao`, deprecated 2025-03-18, which still answers) and
+  `/plenario/votacao/orientacaoBancada/<ini>/<fim>` (one month per request; orientations start
+  2018-10; joined on `sequencialVotacao`). `/plenario/votacao/nominal/{ano}` answers 301 with an
+  empty body.
+- **The Senado does not publish a per-session attendance list.** Attendance comes from the
+  per-senator codes in each vote: Sim, Não, Abstenção, Votou (secret), P-NRV (present, no vote),
+  P-OD, Presidente (art. 51 RISF), NCom (did not attend), AP, LS, MIS, LP, LG, LAP, MERC
+  (justified: parliamentary activity, health leave, mission, private leave, maternity,
+  paternity, Mercosul), NA (dispositivo não citado).
+
+### 10.2 What counts
+
+- Votação: Câmara `siglaOrgao == PLEN` with rows in `votacoesVotos` (symbolic votes and committee
+  votes stay out); Senado every non-secret record with votes. Coverage from 2015-02-01
+  (legislatura 55).
+- Bancada of a UF in a vote: the UF that the house writes in the vote row. Câmara deputies in
+  office who did not vote are added from the history: present at the session
+  (`eventosPresencaDeputados` of the votação's `idEvento`) → "presente sem voto" (318,461 rows),
+  otherwise "ausente" (134,999 rows).
+- Falta, Câmara: a session with `descricaoTipo == "Sessão Deliberativa"` of PLEN, not cancelled,
+  with at least one presence registered, on a day the deputy was in office, without his presence
+  row. No justifications in open data: a licença without formal afastamento (maternity, for
+  instance) is a falta. Talíria Petrone (RJ) shows 14/14 sessions missed in June and July 2020
+  and no vote from June to August.
+- Falta, Senado: each session (`codigoSessao`) with at least one nominal vote, open or secret.
+  Present if any entry of the senator in the session is a presence code; justified if every
+  entry is a justified code; falta (NCom) otherwise.
+- Com a maioria: sim/não equal to the more voted side among sim and não (whatever quorum the
+  matter needed). Contra o partido: sim/não opposite to the majority of the same party in the same
+  vote (party at vote time; ties in the party do not count). Contra o governo: sim/não opposite to
+  a Sim/Não orientation of "Governo" (Câmara `GOV.`/`Governo`; Senado leader "Governo");
+  "Liberado" does not count.
+- Participação: sim, não, abstenção or obstrução over the votações in office, minus the ones he
+  presided.
+
+### 10.3 Senado records of 2015 to February 2017 list the wrong people
+
+`/votacao` for 2015 has 17 records and for 2016 13 (the Senado held far more nominal votes). In
+24 of those 30 and in 8 of 2017 (up to 2017-02-16), 68 to 70 of the 81 names are senators of past
+decades: on 2015-04-01 the list starts "Abdias Nascimento, Ademir Andrade, Antonio Carlos
+Magalhães, Arlindo Porto", the same list on every such record; the deprecated
+`/plenario/lista/votacao` and `/senador/{codigo}/votacoes` return the same records. The six of 2016
+that list the senators in office (2016-05-11 and 2016-08-09) are kept. Rule
+(`senado.MAX_ESTRANHOS`): a record with more than three senators missing from the Senado's own
+lists of legislaturas 55–57 (`/senador/lista/legislatura/N`, 475 codes) is dropped; 32 dropped
+(21 open, 11 secret), the last on 2017-02-16. Before this rule Roberto Freire and José Eduardo
+Dutra (died 2015) showed up as senators of PE and SE voting in 2016–2017.
+
+### 10.4 Counts (run of 2026-10-14)
+
+| ano | Câmara votações | Senado votações | Câmara sessões | Senado sessões |
+|---|---:|---:|---:|---:|
+| 2015 | 275 | 0 | 214 | 0 |
+| 2016 | 196 | 6 | 188 | 2 |
+| 2017 | 210 | 66 | 211 | 55 |
+| 2018 | 135 | 31 | 138 | 51 |
+| 2019 | 316 | 60 | 166 | 50 |
+| 2020 | 393 | 123 | 120 | 76 |
+| 2021 | 755 | 137 | 138 | 94 |
+| 2022 | 507 | 82 | 107 | 47 |
+| 2023 | 300 | 50 | 114 | 39 |
+| 2024 | 273 | 58 | 86 | 27 |
+| 2025 | 429 | 56 | 120 | 36 |
+| 2026 | 123 | 19 | 71 | 19 |
+
+Total 3,912 Câmara and 688 Senado votações; 1,593,037 sim/não/abstenção/obstrução votes;
+government orientation on 3,232 Câmara and 286 Senado votações. Kind (list filter, from what was
+put to the vote): requerimento, emenda ou destaque, texto.
+
+### 10.5 Files and sizes
+
+Common (`frontend/data/votacoes/`, 5.3 MB): `index` 407 KB (one array per votação),
+`proposicoes` 626 KB (title and ementa), one detail file per year 111–881 KB (what was voted,
+result sentence, per-party counts, all orientations), `meta`. Per UF: `static-bancada` (people and
+attendance per month: [faltas, justificadas, sessões]), `static-votos/<ano>` (one string per
+votação aligned to the UF's members), `static-parlamentares/<id>` (per house: first position and
+one character per votação with the vote, plus one base-32 character of flags). The first version
+wrote `[id, voto, marcas]` rows and took 55 MB for the 27 UFs; the positional encoding takes
+10.6 MB. Positions are rebuilt in the browser from the index (per house, oldest first).
+
+| UF | pessoas | com voto | votos | bancada KB | votos/ano KB | parlamentares KB |
+|---|---:|---:|---:|---:|---:|---:|
+| RJ | 127 | 126 | 181,543 | 134 | 290 | 410 |
+| SP | 167 | 166 | 275,741 | 196 | 388 | 591 |
+| MG | 121 | 120 | 209,155 | 149 | 307 | 434 |
+| BA | 80 | 80 | 155,734 | 111 | 252 | 336 |
+| DF | 30 | 29 | 33,344 | 29 | 118 | 76 |
+| AC | 30 | 30 | 33,360 | 29 | 117 | 70 |
+
+(The smallest UFs, 8 deputies and 3 senators, are all about 0.22 MB in total.) Before the rule
+in 10.3, 2 of 1,434 people were outside the emendas roster of their UF; after it, 0 of 1,426.

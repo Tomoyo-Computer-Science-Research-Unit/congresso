@@ -1,8 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "@/components/UfLink";
 import { Panel, Screen } from "@/components/ui";
-import { BB_CODIGO, CASA_LABELS, formatBRL, formatInt, getFavorecidos, getIpca, getMeta, getRosterSemEmendas, getSources, getStats, getTotals, niceName } from "@/lib/static-api";
+import {
+  BB_CODIGO,
+  CASA_LABELS,
+  formatBRL,
+  formatInt,
+  getFavorecidos,
+  getIpca,
+  getMeta,
+  getRosterSemEmendas,
+  getSources,
+  getStats,
+  getTotals,
+  loadVotacoesMeta,
+  niceName,
+  type VotacoesMeta
+} from "@/lib/static-api";
 import { HOMONIMOS, bancadaCurta, ufByCode, type UfInfo } from "@/lib/uf";
 import { useUf } from "@/lib/use-uf";
 
@@ -22,9 +38,26 @@ function sourceLabel(name: string): string {
   return name.replace("Portal da Transparencia - Emendas parlamentares (bulk zip)", "Portal da Transparência, emendas parlamentares");
 }
 
+function RosterTable({ roster }: { roster: ReturnType<typeof getRosterSemEmendas> }) {
+  return (
+    <table className="ruled">
+      <tbody>
+        {roster.map((person) => (
+          <tr key={`${person.nome}-${person.casa}`}>
+            <td className="whitespace-normal break-words">{niceName(person.nome_parlamentar || person.nome)}</td>
+            <td className="faint">{person.partido}</td>
+            <td className="faint">{CASA_LABELS[person.casa ?? ""] ?? person.casa}</td>
+            <td className="num faint right">{person.legislaturas.join(", ")}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function Row({ term, children }: { term: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-4 border-t border-line py-2.5 text-[11.5px] leading-5">
+    <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 border-t border-line py-2 text-[11.5px] leading-5">
       <span className="serif text-[13px] leading-5 text-ink">{term}</span>
       <span className="text-sumi">{children}</span>
     </div>
@@ -48,8 +81,67 @@ function homonimos(uf: UfInfo, stats: { collisions?: Record<string, string[]>; u
     : `${nomes.length === 1 ? "o nome" : "os nomes"} ${lista} também ${nomes.length === 1 ? "existe" : "existem"} fora da bancada; todas as linhas caem na legislatura certa e ficam.`;
 }
 
+function formatDateBr(iso: string): string {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+}
+
+function soma(porAno: Record<string, number> | undefined): number {
+  return Object.values(porAno ?? {}).reduce((total, value) => total + value, 0);
+}
+
+/** Linhas sobre votações e presença; os números vêm de data/votacoes/meta. */
+function VotosRows({ meta }: { meta: VotacoesMeta | null }) {
+  const cam = meta?.votacoes.camara ?? {};
+  const descartadas = meta?.stats?.senado_descartadas;
+  const sen = meta?.votacoes.senado ?? {};
+  const gerado = meta ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "America/Sao_Paulo" }).format(new Date(meta.generated_at)) : "–";
+  return (
+    <>
+      <Row term="Votações">
+        Votações nominais de plenário desde 01/02/2015, legislaturas 55 a 57, lidas em {gerado}: {formatInt(soma(cam))} da Câmara e {formatInt(soma(sen))} do Senado. Na
+        Câmara entra a votação do Plenário com voto por deputado nos arquivos anuais; simbólicas e de comissões ficam fora. No Senado, votações secretas (autoridades)
+        ficam fora da lista e contam para a presença.
+      </Row>
+      <Row term="Senado, 2015 a 2017">
+        Até fevereiro de 2017 o serviço de votações do Senado lista, na maior parte dos registros, senadores de outras décadas no lugar de quem votou (em 01/04/2015, 69 dos
+        81 nomes). Registros com mais de três nomes fora das listas de senadores das legislaturas 55 a 57 ficam fora: {formatInt(descartadas?.total)}, o último de{" "}
+        {descartadas?.ultima ? formatDateBr(descartadas.ultima) : "–"}. Do Senado sobram {formatInt(sen["2016"] ?? 0)} votações de 2016 e nenhuma de 2015.
+      </Row>
+      <Row term="Quem é da UF">
+        A UF que a Câmara e o Senado registram em cada voto. Quem estava em exercício e não votou entra como ausente, ou presente sem voto se registrou presença na sessão;
+        o exercício de cada deputado vem do histórico da API da Câmara (posse, licença, retorno, fim de mandato). A Bancada coletiva não vota.
+      </Row>
+      <Row term="Maioria, partido">
+        Com a maioria: sim ou não igual ao lado mais votado no plenário, qualquer que fosse o quórum exigido. Contra o partido: sim ou não oposto à maioria dos colegas do mesmo
+        partido na mesma votação, com o partido da data do voto; empate no partido não conta. Participação: sim, não, abstenção ou obstrução sobre as votações em que estava em
+        exercício, descontadas as que presidiu.
+      </Row>
+      <Row term="Governo">
+        Orientação do líder do governo: na Câmara, a bancada “Governo” do arquivo de orientações ({formatInt(meta?.com_orientacao_governo.camara)} votações); no Senado, o
+        painel eletrônico, publicado desde outubro de 2018 ({formatInt(meta?.com_orientacao_governo.senado)} votações). Contra o governo é sim ou não oposto a uma orientação
+        sim ou não; “liberado” não conta.
+      </Row>
+      <Row term="Falta">
+        Câmara: sessão deliberativa do Plenário, não cancelada, em que o deputado estava em exercício e não tem registro de presença ({formatInt(soma(meta?.sessoes.camara))}{" "}
+        sessões). Os dados abertos da Câmara não trazem a justificativa: licença sem afastamento do mandato, como a de gestante, conta como falta. Senado: sem lista de presença aberta, conta cada sessão com votação
+        nominal, aberta ou secreta ({formatInt(soma(meta?.sessoes.senado))} sessões); falta é não ter comparecido a nenhuma votação da sessão; licença, missão e atividade
+        parlamentar são ausência justificada, entre parênteses nas grades.
+      </Row>
+      <Row term="Atualização">Os arquivos do ano corrente são baixados de novo a cada rodada diária; os anos anteriores ficam em cache.</Row>
+    </>
+  );
+}
+
 export function MethodScreen() {
   const UF = useUf();
+  const [votosMeta, setVotosMeta] = useState<VotacoesMeta | null>(null);
+  useEffect(() => {
+    let alive = true;
+    loadVotacoesMeta().then((data) => alive && setVotosMeta(data));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const meta = getMeta();
   const sources = getSources();
   const roster = getRosterSemEmendas();
@@ -65,8 +157,8 @@ export function MethodScreen() {
   const bbShare = bb && favStats.total_recebido ? Math.round((bb.total / favStats.total_recebido) * 100) : null;
 
   return (
-    <Screen columns="minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1fr)" rows="minmax(0, 1fr)">
-      <Panel title={<b>Como os números chegam aqui</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">lido em {accessed}</span>} fill>
+    <Screen columns="minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)" rows="minmax(0, 1fr) minmax(0, 1fr)">
+      <Panel title={<b>Emendas</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">lido em {accessed}</span>} fill style={{ gridRow: "1 / span 2" }}>
         <Row term="Fonte">
           Portal da Transparência (CGU), download “Emendas parlamentares”, regenerado a partir do SIAFI: {formatInt(stats.rows_total)} linhas, orçamentos de {meta.years[0] - 1} a{" "}
           {meta.latest_year}. Uma linha é uma emenda numa ação orçamentária e numa localidade; a mesma emenda pode ter várias.
@@ -109,7 +201,15 @@ export function MethodScreen() {
         </Row>
       </Panel>
 
-      <Panel title={<b>Arquivos lidos</b>} flush fill>
+      <Panel title={<b>Votações e presença</b>} fill style={{ gridRow: "1 / span 2" }}>
+        <VotosRows meta={votosMeta} />
+      </Panel>
+
+      <Panel title={<b>Sem emenda executada</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">{roster.length} de {formatInt(stats.roster_size)}</span>} flush fill style={{ gridColumn: 3, gridRow: 2 }}>
+        <RosterTable roster={roster} />
+      </Panel>
+
+      <Panel title={<b>Arquivos lidos</b>} flush fill style={{ gridColumn: 3, gridRow: 1 }}>
         <table className="ruled">
           <thead>
             <tr>
@@ -119,7 +219,7 @@ export function MethodScreen() {
             </tr>
           </thead>
           <tbody>
-            {sources.map((source) => (
+            {[...sources, ...(votosMeta?.sources ?? [])].map((source) => (
               <tr key={source.name}>
                 <td className="whitespace-normal break-words">
                   <a href={source.url} target="_blank" rel="noreferrer" className="text-ink underline decoration-fog underline-offset-4 hover:decoration-ink" title={source.url}>
@@ -134,20 +234,6 @@ export function MethodScreen() {
         </table>
       </Panel>
 
-      <Panel title={<b>Sem emenda executada</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">{roster.length} de {formatInt(stats.roster_size)}</span>} flush fill>
-        <table className="ruled">
-          <tbody>
-            {roster.map((person) => (
-              <tr key={`${person.nome}-${person.casa}`}>
-                <td className="whitespace-normal break-words">{niceName(person.nome_parlamentar || person.nome)}</td>
-                <td className="faint">{person.partido}</td>
-                <td className="faint">{CASA_LABELS[person.casa ?? ""] ?? person.casa}</td>
-                <td className="num faint right">{person.legislaturas.join(", ")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Panel>
     </Screen>
   );
 }

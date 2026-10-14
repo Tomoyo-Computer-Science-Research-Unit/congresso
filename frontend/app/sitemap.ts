@@ -3,8 +3,8 @@ import { ufRoute, UFS } from "@/lib/uf";
 
 export const dynamic = "force-static";
 
-const baseUrl = `https://g0v.tomoyo.systems${process.env.NEXT_PUBLIC_BASE_PATH ?? "/emendas"}`;
-const screens = ["/", "/autores", "/destinos", "/funcoes", "/favorecidos", "/metodologia", "/status"];
+const baseUrl = `https://g0v.tomoyo.systems${process.env.NEXT_PUBLIC_BASE_PATH ?? "/congresso"}`;
+const screens = ["/", "/autores", "/votacoes", "/presenca", "/destinos", "/funcoes", "/favorecidos", "/metodologia", "/status"];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return UFS.flatMap((uf) =>

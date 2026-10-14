@@ -1,7 +1,7 @@
-"""Escreve o ``status.json`` servido em ``/emendas/status.json``: ultima rodada, ultimo build,
+"""Escreve o ``status.json`` servido em ``/congresso/status.json``: ultima rodada, ultimo build,
 arquivo do Portal (local e no servidor deles) e as ultimas execucoes.
 
-    python -m app.etl.write_status --uf all --runs /root/g0v/runs-emendas.jsonl --site /root/g0v/site/emendas
+    python -m app.etl.write_status --uf all --runs /root/g0v/runs-emendas.jsonl --site /root/g0v/site/congresso
 """
 
 from __future__ import annotations

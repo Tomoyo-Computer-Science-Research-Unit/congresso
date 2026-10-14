@@ -1,0 +1,6 @@
+﻿"id";"uri";"urlDocumentoPauta";"dataHoraInicio";"dataHoraFim";"situacao";"descricao";"descricaoTipo";"localExterno";"localCamara.nome";"localCamara.predio";"localCamara.sala";"localCamara.andar"
+"9001";"";"";"2023-03-14T14:00:00";"";"Encerrada (Final)";"Sessão Deliberativa Extraordinária";"Sessão Deliberativa";"";"Plenário";"";"";""
+"9002";"";"";"2023-03-15T10:00:00";"";"Encerrada";"Reunião";"Reunião Deliberativa";"";"";"";"";""
+"9003";"";"";"2023-03-15T14:00:00";"";"Cancelada";"Sessão Deliberativa";"Sessão Deliberativa";"";"Plenário";"";"";""
+"9004";"";"";"2023-03-16T14:00:00";"";"Encerrada (Final)";"Sessão Deliberativa Ordinária";"Sessão Deliberativa";"";"Plenário";"";"";""
+"9005";"";"";"2023-03-17T14:00:00";"";"Encerrada (Final)";"Sessão Não Deliberativa de Debates";"Sessão Não Deliberativa de Debates";"";"Plenário";"";"";""

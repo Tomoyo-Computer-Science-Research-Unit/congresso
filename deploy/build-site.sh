@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Roda no droplet, por cron, uma vez por dia: puxa main, baixa de novo o arquivo do Portal da
-# Transparência, regenera os dados das 27 UFs (o zip é lido uma vez) e, se o código ou os dados
+# Transparência, regenera os dados das 27 UFs (o zip é lido uma vez), atualiza votações e presença
+# da Câmara e do Senado (ano corrente baixado de novo) e, se o código ou os dados
 # mudaram desde o último build, faz um build Next só, com todas as UFs, e troca os arquivos em
-# /root/g0v/site/emendas (RJ na raiz, as demais em /emendas/<uf>/, dados em /emendas/data/<uf>/).
+# /root/g0v/site/congresso (RJ na raiz, as demais em /congresso/<uf>/, dados em /congresso/data/<uf>/
+# e, comuns às UFs, /congresso/data/votacoes/).
 # Falhas avisam por e-mail. Uma UF cujo ETL falha segue com os dados commitados em main; as outras
 # usam os dados novos. Cada rodada registra quanto tempo levaram ETL e build.
 #
@@ -17,7 +19,7 @@ DIR="${DIR:-/root/g0v}"
 SRC="$DIR/src-emendas"
 MARK="$DIR/.emendas-built"
 RUNS="$DIR/runs-emendas.jsonl"
-BASE_PATH="/emendas"
+BASE_PATH="/congresso"
 # UFs vêm de backend/app/config.py (UF_ORDER); "all" no ETL.
 ALERT_TO="${ALERT_TO:-arete@tomoyo.systems}"
 export NEXT_TELEMETRY_DISABLED=1
@@ -115,6 +117,34 @@ $export_output"
     log "ETL ok"
   fi
   etl_s=$(( $(date +%s) - t0 ))
+
+  # Votações e presença (Câmara e Senado): os arquivos do ano corrente são baixados de novo, os de
+  # anos passados vêm do cache em data/raw. Falha aqui não derruba as emendas: as UFs que falharam
+  # (ou todas, se caiu antes de separar por UF) seguem com os arquivos de votos de main.
+  t0="$(date +%s)"
+  if votos_output="$(cd "$SRC/backend" && "$PY" -m app.etl.export_votos --uf all 2>&1)"; then
+    log "votos ok"
+  else
+    vfailed="$(printf '%s\n' "$votos_output" | sed -n 's/^export-votos-failed: //p')"
+    restore="$vfailed"
+    if [ -z "$vfailed" ]; then
+      restore="$all_ufs"
+      git -C "$SRC" checkout -q -- frontend/data/votacoes 2>/dev/null || true
+      git -C "$SRC" clean -q -fd -- frontend/data/votacoes
+    fi
+    for uf in $restore; do
+      lower="$(echo "$uf" | tr 'A-Z' 'a-z')"
+      for f in static-bancada.generated.json static-votos static-parlamentares; do
+        git -C "$SRC" checkout -q -- "frontend/data/$lower/$f" 2>/dev/null || true
+        git -C "$SRC" clean -q -fd -- "frontend/data/$lower/$f"
+      done
+    done
+    log "votos falharam em: ${vfailed:-todas}; seguem os de main"
+    note="${note:+$note; }votos falharam: ${vfailed:-todas}"
+    notify "[emendas-rj] votos falharam: ${vfailed:-todas}" "$(printf '%s\n' "$votos_output" | tail -c 6000)"
+  fi
+  votos_s=$(( $(date +%s) - t0 ))
+  note="${note:+$note; }votos ${votos_s}s"
 fi
 
 key="$rev $(cd "$SRC" && "$PY" - <<'EOF'

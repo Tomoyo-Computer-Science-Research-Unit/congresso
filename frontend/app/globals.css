@@ -523,7 +523,7 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   height: 48px;
   padding: 0 var(--gutter);
   border-bottom: 1px solid var(--line-strong);
@@ -943,23 +943,20 @@ html.fx[data-theme="dark"] .detail {
   letter-spacing: 0.02em;
 }
 
-/* Emendas: o efeito de impressão alcança tudo que tem texto ou traço, gráficos inclusive. */
+/* O efeito de impressão alcança texto e listas. Gráficos e o mapa ficam sem ele: o filtro SVG é
+   recalculado a cada hover e travava a página. */
 html.fx .barlist,
-html.fx .chart,
 html.fx .stat,
 html.fx .prose-fx,
 html.fx .yearselect,
-html.fx .wordmark,
-html.fx .map-wrap {
+html.fx .wordmark {
   filter: url(#print-fx-light);
 }
 html.fx[data-theme="dark"] .barlist,
-html.fx[data-theme="dark"] .chart,
 html.fx[data-theme="dark"] .stat,
 html.fx[data-theme="dark"] .prose-fx,
 html.fx[data-theme="dark"] .yearselect,
-html.fx[data-theme="dark"] .wordmark,
-html.fx[data-theme="dark"] .map-wrap {
+html.fx[data-theme="dark"] .wordmark {
   filter: url(#print-fx-dark);
 }
 
@@ -982,4 +979,82 @@ html.fx[data-theme="dark"] .map-wrap {
 /* Painéis que preenchem a linha rolam por dentro: listas, menus e tabelas compridas. */
 .panel__body--fill {
   overflow: auto;
+}
+
+/* --- Votações e presença ------------------------------------------------------------------- */
+
+.voto-sim {
+  color: var(--better);
+}
+.voto-nao {
+  color: var(--worse);
+}
+.menu button[aria-selected="true"] .voto-sim,
+.menu button[aria-selected="true"] .voto-nao {
+  color: var(--paper);
+  opacity: 0.85;
+}
+
+/* Faltas por mês: anos nas linhas, meses nas colunas; o fundo escurece com o número. */
+.monthgrid {
+  display: grid;
+  grid-template-columns: 44px repeat(12, minmax(0, 1fr)) 48px;
+  gap: 2px;
+  font-size: 10.5px;
+}
+.monthgrid > span {
+  display: grid;
+  place-items: center;
+  height: 22px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.monthgrid > .head {
+  border-color: transparent;
+  color: var(--ash);
+  letter-spacing: 0.1em;
+}
+.monthgrid > .empty {
+  border-style: dashed;
+  color: var(--ash);
+}
+
+.ruled--tight {
+  table-layout: fixed;
+  width: 100%;
+}
+.ruled--tight th,
+.ruled--tight td {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+/* Campo de busca com a mesma cara dos seletores. */
+input.yearselect {
+  padding-right: 8px;
+  background-image: none;
+  text-transform: none;
+  letter-spacing: 0.04em;
+  font-size: 11.5px;
+}
+
+html.fx .monthgrid,
+html.fx .votegrid {
+  filter: url(#print-fx-light);
+}
+html.fx[data-theme="dark"] .monthgrid,
+html.fx[data-theme="dark"] .votegrid {
+  filter: url(#print-fx-dark);
+}
+
+/* Listas e tabelas que chegam a milhares de linhas (votações, votos de um parlamentar, grade de
+   faltas) ficam sem o filtro, pelo mesmo motivo dos gráficos. */
+html.fx .nofx,
+html.fx[data-theme="dark"] .nofx {
+  filter: none;
+}
+
+/* Oito telas e o seletor de UF cabem em 1280 px: o seletor do cabeçalho aperta o espaçamento. */
+.app__header .yearselect {
+  letter-spacing: 0.06em;
 }

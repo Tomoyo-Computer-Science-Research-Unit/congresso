@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // Um build, 27 UFs: RJ na raiz, as demais em /<uf>/. As telas rodam para uma amostra de UFs
 // (a maior, a menor, o DF sem municípios); os casos de permalink usam ids reais de RJ e SP.
-const screens = ["/", "/autores", "/destinos", "/funcoes", "/favorecidos", "/metodologia", "/status"];
+const screens = ["/", "/autores", "/votacoes", "/presenca", "/destinos", "/funcoes", "/favorecidos", "/metodologia", "/status"];
 const SAMPLE = ["", "/sp", "/mg", "/df", "/am", "/ba", "/rr"];
 const at = (prefix: string, screen: string) => `${prefix}${screen === "/" ? "/" : screen}`;
 
@@ -24,8 +24,8 @@ const CASES = [
 ];
 
 test.describe("static pages", () => {
-  for (const prefix of ["", "/sp", "/df"]) {
-    for (const screen of screens) {
+  for (const prefix of ["", "/sp", "/mg", "/df"]) {
+    for (const screen of prefix === "/mg" ? ["/votacoes", "/presenca", "/autores"] : screens) {
       test(`${at(prefix, screen)} renders with visible content`, async ({ page }) => {
         const consoleErrors: string[] = [];
         page.on("console", (message) => {
@@ -89,6 +89,60 @@ for (const c of CASES) {
     await expect(page).toHaveURL(new RegExp(`${c.prefix}/autores`));
     await page.keyboard.press("ArrowDown");
     await expect(page.getByRole("listbox", { name: "Autores" }).getByRole("option", { selected: true })).not.toContainText(c.bancada);
+  });
+}
+
+// Votações e presença: as mesmas telas em RJ, SP, MG e DF; votações comuns, votos filtrados pela UF.
+for (const prefix of ["", "/sp", "/mg", "/df"]) {
+  test(`${prefix || "/"}: votações list the votes of the UF's bancada`, async ({ page }) => {
+    await page.goto(`${prefix}/votacoes`);
+    const list = page.getByRole("listbox", { name: "Votações" });
+    await expect.poll(async () => list.getByRole("option").count(), { timeout: 15_000 }).toBeGreaterThan(50);
+    await expect(list.getByRole("option", { selected: true })).toBeVisible();
+    await expect.poll(async () => page.locator(".votegrid li").count(), { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect.poll(async () => page.locator("table.ruled tbody tr").count(), { timeout: 15_000 }).toBeGreaterThan(3);
+    await page.getByRole("combobox", { name: "Casa" }).selectOption("senado");
+    await expect(list.getByRole("option").first()).toContainText("Sen.");
+    await list.getByRole("option").first().click();
+    await expect(page).toHaveURL(/v=s%3A/);
+    // senadores da UF: três por vez, mais suplentes; a coluna de quem não votou pode ficar vazia
+    await expect.poll(async () => page.locator(".votegrid li").count(), { timeout: 15_000 }).toBeGreaterThan(1);
+  });
+
+  test(`${prefix || "/"}: presença shows a month grid per parlamentar`, async ({ page }) => {
+    await page.goto(`${prefix}/presenca`);
+    const rows = page.locator("table.ruled tbody tr");
+    await expect.poll(async () => rows.count(), { timeout: 15_000 }).toBeGreaterThan(5);
+    await expect(page.locator("table.ruled thead th").filter({ hasText: /^jan$/ })).toHaveCount(1);
+    await page.getByRole("combobox", { name: "Ano" }).selectOption("all");
+    await expect(page.locator("table.ruled thead th").filter({ hasText: /^2015$/ })).toHaveCount(1);
+    await page.getByRole("combobox", { name: "Casa" }).selectOption("senado");
+    await expect.poll(async () => rows.count()).toBeGreaterThan(2);
+    const first = (await rows.first().locator("td").first().innerText()).trim();
+    await page.getByRole("searchbox", { name: "Buscar parlamentar" }).fill(first.split(" ")[0]);
+    await expect.poll(async () => rows.count()).toBeGreaterThan(0);
+    await expect(rows.first()).toContainText(first.split(" ")[0]);
+  });
+}
+
+for (const c of [
+  { prefix: "", id: "camara-160597", nome: "Romário", bancada: "bancada-rj" },
+  { prefix: "/sp", id: "camara-160565", nome: "Mara Gabrilli", bancada: "bancada-sp" }
+]) {
+  test(`${c.prefix || "/"}: the author panel shows votes and absences; the bancada has none`, async ({ page }) => {
+    await page.goto(`${c.prefix}/autores?autor=${c.id}`);
+    await expect(page.getByRole("listbox", { name: "Autores" }).getByRole("option", { selected: true })).toContainText(c.nome);
+    await expect(page.locator(".stat").filter({ hasText: "Participação" })).toContainText("%");
+    await page.getByRole("button", { name: "Votos", exact: true }).click();
+    await expect.poll(async () => page.locator("table.ruled tbody tr").count(), { timeout: 15_000 }).toBeGreaterThan(100);
+    await expect(page.locator("table.ruled tbody tr").first()).toContainText(/Câm\.|Sen\./);
+    await page.getByRole("combobox", { name: "Filtro de votos" }).selectOption("maioria");
+    await expect.poll(async () => page.locator("table.ruled tbody tr").count()).toBeGreaterThan(0);
+    await page.keyboard.press("v");
+    await expect(page.locator(".monthgrid")).toBeVisible();
+    await page.goto(`${c.prefix}/autores?autor=${c.bancada}`);
+    await expect(page.getByRole("button", { name: "Votos", exact: true })).toBeDisabled();
+    await expect(page.locator(".stat").filter({ hasText: "Participação" })).toContainText("–");
   });
 }
 

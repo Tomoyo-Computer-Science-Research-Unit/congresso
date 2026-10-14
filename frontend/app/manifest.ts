@@ -4,9 +4,9 @@ export const dynamic = "force-static";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Emendas",
-    short_name: "Emendas",
-    description: "Emendas parlamentares das bancadas federais das 27 UFs, a partir do Portal da Transparência.",
+    name: "Congresso",
+    short_name: "Congresso",
+    description: "Deputados federais e senadores das 27 UFs: emendas parlamentares, votações nominais e faltas em plenário, a partir do Portal da Transparência, da Câmara e do Senado.",
     start_url: "/",
     display: "standalone",
     background_color: "#050505",

@@ -8,10 +8,12 @@ import { useUf } from "@/lib/use-uf";
 export const NAV_ITEMS = [
   { href: "/", label: "Panorama", key: "1" },
   { href: "/autores", label: "Autores", key: "2" },
-  { href: "/destinos", label: "Destinos", key: "3" },
-  { href: "/funcoes", label: "Funções", key: "4" },
-  { href: "/favorecidos", label: "Favorecidos", key: "5" },
-  { href: "/metodologia", label: "Método", key: "6" }
+  { href: "/votacoes", label: "Votações", key: "3" },
+  { href: "/presenca", label: "Presença", key: "4" },
+  { href: "/destinos", label: "Destinos", key: "5" },
+  { href: "/funcoes", label: "Funções", key: "6" },
+  { href: "/favorecidos", label: "Favorecidos", key: "7" },
+  { href: "/metodologia", label: "Método", key: "8" }
 ];
 
 export function isActivePath(fullPath: string, href: string) {
@@ -39,11 +41,11 @@ export function SiteNav() {
               <Link
                 href={ufRoute(uf, item.href)}
                 aria-current={active ? "page" : undefined}
-                className={`flex h-12 items-center gap-1.5 px-2.5 text-[10.5px] font-medium uppercase tracking-[0.14em] transition-colors xl:px-3 xl:text-[11px] ${
+                className={`flex h-12 items-center px-[7px] text-[10.5px] font-medium uppercase tracking-[0.06em] transition-colors 2xl:px-3 2xl:text-[11px] 2xl:tracking-[0.14em] ${
                   active ? "text-ink shadow-[inset_0_-1px_0_var(--ink)]" : "text-slate hover:text-ink"
                 }`}
               >
-                <span className="kbd">{item.key}</span>
+                <span className="kbd !mr-1">{item.key}</span>
                 {item.label}
               </Link>
             </li>

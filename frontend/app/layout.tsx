@@ -16,8 +16,8 @@ import "./globals.css";
 const mincho = Shippori_Mincho_B1({ weight: ["500", "700"], subsets: ["latin"], variable: "--font-mincho", display: "swap" });
 const archivo = Archivo({ subsets: ["latin"], weight: "variable", axes: ["wdth"], variable: "--font-archivo", display: "swap" });
 
-export const SITE_NAME = "Emendas";
-const DESCRIPTION = `Emendas parlamentares da bancada federal ${doEstado(DEFAULT_UF)} desde 2015: quem enviou, quanto, para onde e em quê, a partir do Portal da Transparência.`;
+const SITE_NAME = "Congresso";
+const DESCRIPTION = `A bancada federal ${doEstado(DEFAULT_UF)} desde 2015: emendas parlamentares (quem enviou, quanto, para onde e em quê), votações nominais e faltas em plenário, a partir do Portal da Transparência, da Câmara e do Senado.`;
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const SITE_URL = `https://g0v.tomoyo.systems${BASE_PATH}`;
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   authors: [{ name: "Tomoyo", url: "https://tomoyo.systems" }],
   creator: "Tomoyo",
   publisher: "Tomoyo",
-  keywords: [DEFAULT_UF.nome, "emendas parlamentares", "favorecidos", "orçamento", "Portal da Transparência", "deputados federais", "senadores", "dados públicos"],
+  keywords: [DEFAULT_UF.nome, "emendas parlamentares", "votações nominais", "presença", "favorecidos", "orçamento", "Portal da Transparência", "deputados federais", "senadores", "dados públicos"],
   alternates: { canonical: "/" },
   twitter: { card: "summary", title: SITE_NAME, description: DESCRIPTION },
   icons: { icon: `${BASE_PATH}/icon.png`, shortcut: `${BASE_PATH}/icon.png`, apple: `${BASE_PATH}/icon.png` },
@@ -64,7 +64,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <MoneyProvider>
         <div className="app">
           <header className="app__header">
-            <span className="flex shrink-0 items-center gap-3 whitespace-nowrap text-ink" data-brand>
+            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-ink" data-brand>
               {/* O mon da Tomoyo leva de volta à home do g0v. */}
               <a href="https://g0v.tomoyo.systems/" aria-label="g0v.tomoyo.systems" data-brand>
                 {/* eslint-disable-next-line @next/next/no-img-element */}

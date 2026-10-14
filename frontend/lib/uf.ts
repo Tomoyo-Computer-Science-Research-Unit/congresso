@@ -1,5 +1,5 @@
 /**
- * As 27 UFs num build só. O RJ mora na raiz do site (/emendas/), as demais em /emendas/<uf>/;
+ * As 27 UFs num build só. O RJ mora na raiz do site (/congresso/), as demais em /congresso/<uf>/;
  * a UF da página vem do primeiro segmento do caminho. A lista sai do backend (data/ufs.json,
  * gerado de backend/app/config.py) e os dados de cada UF são JSON estáticos em
  * <basePath>/data/<uf>/, buscados quando a tela pede (lib/static-api.ts).
@@ -68,6 +68,11 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 /** Endereço de um arquivo de dados da UF: <basePath>/data/<uf>/<file>. */
 export function dataUrl(uf: UfInfo, file: string): string {
   return `${BASE_PATH}/data/${uf.code.toLowerCase()}/${file}`;
+}
+
+/** Endereço de um arquivo de dados comum às UFs (votações): <basePath>/data/votacoes/<file>. */
+export function commonDataUrl(file: string): string {
+  return `${BASE_PATH}/data/votacoes/${file}`;
 }
 
 /** Endereço do status.json da UF, escrito pelo build no servidor. */
