@@ -289,8 +289,8 @@ audit (collisions, never-matched, author-less rows).
    money delivered: `pago` is cash paid in that year, `rp_pago` is paid in later years out of
    restos a pagar (so a 2019 amendment's money often shows up as `rp_pago`, and 2026 has `rp_pago
    = 0` by construction). Sum `pago + rp_pago` for "money that reached the destination so far"; use
-   `empenhado` for "money committed". No deflation is applied (an IPCA series would be needed for
-   constant reais); 2015–2017 are also under-reported (2015 nationally only 3,714 rows).
+   `empenhado` for "money committed". The data stays nominal; section 6 gives IPCA factors the
+   frontend can apply; 2015–2017 are also under-reported (2015 nationally only 3,714 rows).
 4. Destination granularity: 44 % of kept rows have a município; the rest is "UF", "múltiplo" or
    "nacional" (e.g. transfers to state funds, SUS ceilings), so municipal rankings undercount.
 5. Rows are line items (ação × localidade × PO), not amendments: count `codigo` distinct for
@@ -314,8 +314,252 @@ emendas-rj/
     app/http.py       cached streaming fetch + sha256 sidecars + retries
     app/names.py      normalize(), split_siafi_author()
     app/parsers/emendas.py  CSV parser (latin-1, BR numbers, localidade classifier)
+    app/parsers/favorecidos.py  parser for _PorFavorecido.csv (streams, filters by amendment code; slug())
+    app/favorecidos.py  aggregation of recebimentos per favorecido (section 5)
+    app/ipca.py       IPCA series from SIDRA + deflator factors (section 6)
     app/roster.py     Câmara + Senado roster, national name index, cross-house merge
     app/match.py      strict / loose / collision matcher
     app/etl/export_snapshot.py  orchestration, aggregates, snapshot writer
-    tests/            12 pytest tests on fixtures (mini latin-1 CSV, mini roster)
+    app/etl/export_static_frontend.py  frontend/lib/static-*.generated.json (core, autores, destinos, favorecidos, geo)
+    tests/            20 pytest tests on fixtures (mini latin-1 CSVs, mini roster, IPCA toy series)
 ```
+
+## 5. Favorecidos — pra quem foi o dinheiro (added 2026-10-14)
+
+Source: the third member of the same zip, `EmendasParlamentares_PorFavorecido.csv` (182,652,083
+bytes, 827,457 rows, 13 columns: Código da Emenda; Código/Nome do Autor; Número; Tipo de Emenda;
+Ano/Mês `YYYYMM`; Código do Favorecido; Favorecido; Natureza Jurídica; Tipo Favorecido; UF
+Favorecido; Município Favorecido; Valor Recebido). One row = (amendment, favorecido, month) payment
+total. It is streamed (`app/parsers/favorecidos.py`) and only rows whose `Código da Emenda` is in
+the snapshot (7,783 RJ codes incl. Bancada RJ) are parsed; the file is ordered by favorecido name,
+not by code, so the whole file is read every run (≈3 s). The author id attached to each row is the
+snapshot's (`autor_id` of the amendment code), never re-matched from this file's name column;
+0 rows disagreed on the SIAFI author code.
+
+Quirks: `Tipo Favorecido` has a truncated variant `Inscrição Genéric` (normalised) and the values
+`Pessoa Jurídica | Pessoa Fisica | Unidade Gestora | Inscrição Genérica | Sem informação | Inválido`;
+`UF Favorecido` uses `-1` and blank for unknown; code `-8` / `SEM INFORMACAO` is the unknown
+favorecido. CPFs of pessoas físicas come masked by the Portal (`***.638.223-**`); they are kept
+exactly as given, used only as grouping keys, and never reconstructed. For file names the code is
+slugged (`***.638.223-**` → `xxx638223xx`, `-8` → `m8`; CNPJs unchanged).
+
+### 5.1 Numbers (zip of 2026-10-10)
+
+| metric | value |
+|---|---:|
+| rows matched to RJ amendments | **40,679** (of 827,457) |
+| distinct favorecidos (Código do Favorecido) | **9,800** |
+| amendments with ≥1 payment row | 6,958 of 7,783 (825 without: 733 of them have `pago + rp_pago = 0`, mostly 2026 empenhos not yet paid) |
+| payment months covered | 2015-10 … 2026-10 |
+| total `Valor Recebido` | **R$ 12,278.8 mi** |
+| `pago + rp_pago` of the same amendments in the main file | R$ 12,415.3 mi (gap R$ 136.5 mi = 1.1 %) |
+
+By `Tipo Favorecido` (rows / R$ mi): Pessoa Jurídica 36,310 / 12,235.4 · Inscrição Genérica
+241 / 30.1 · Pessoa Física 3,757 / 5.8 (2,234 masked CPFs: diárias, bolsas, pequenos pagamentos) ·
+Unidade Gestora 93 / 4.0 · Sem informação 224 / 3.3 · Inválido 54 / 0.2.
+
+By `Natureza Jurídica` (R$ mi): Sociedade de Economia Mista 4,397.0 (2 favorecidos — see the
+Banco do Brasil caveat below) · Fundo Público da Adm. Direta Municipal 2,917.0 (169 fundos) ·
+Associação Privada 1,824.4 (612) · Município 1,058.5 (118) · Sociedade Empresária Limitada 966.5
+(5,431) · Fundação Privada 686.8 · Órgão Público do Executivo Estadual 130.2 · Fundo Público
+Estadual 73.3 · S.A. Fechada 51.7 · Sem informação 43.3 · S.A. Aberta 21.6 · Estado 20.9 ·
+Empresa Pública 15.8 · Sociedade Simples Ltda 14.5 · Empresário Individual 10.4.
+
+Payments by calendar year of payment (R$ mi): 2015 4.4 · 2016 295.8 · 2017 446.8 · 2018 682.2 ·
+2019 570.7 · 2020 887.3 · 2021 897.8 · 2022 941.0 · 2023 1,708.1 · 2024 1,534.0 · 2025 2,291.2 ·
+2026 2,019.5 (to October).
+
+Top 15 favorecidos (R$ mi; n_em = distinct amendments, n_au = distinct authors):
+
+| # | código | favorecido | natureza | UF/município | total | n_em | n_au |
+|---|---|---|---|---|---:|---:|---:|
+| 1 | 00000000000191 | BANCO DO BRASIL SA | Soc. Economia Mista | DF Brasília | 4,397.0 | 2,476 | 124 |
+| 2 | 11128809000110 | FUNDO MUNICIPAL DE SAUDE DE DUQUE DE CAXIAS | Fundo Público Municipal | RJ Duque de Caxias | 259.2 | 57 | 31 |
+| 3 | 02385669000174 | FIOTEC – Fund. p/ Desenv. Científico e Tecnológico em Saúde | Fundação Privada | RJ Rio de Janeiro | 250.1 | 165 | 28 |
+| 4 | 01953247000195 | INSTITUTO CARIOCA DE ATIVIDADES – ICA | Associação Privada | RJ Rio de Janeiro | 154.6 | 33 | 17 |
+| 5 | 03686998000118 | CENTRO DE PESQUISAS E DE AÇÕES SOCIAIS E CULTURAIS – CPASC | Associação Privada | RJ Rio de Janeiro | 134.0 | 32 | 15 |
+| 6 | 29138336000105 | MUNICIPIO DE SAO JOAO DE MERITI | Município | RJ São João de Meriti | 124.2 | 41 | 27 |
+| 7 | 10435993000188 | FUNDO MUNICIPAL DE SAUDE DE SAO JOAO DE MERITI | Fundo Público Municipal | RJ São João de Meriti | 119.5 | 41 | 23 |
+| 8 | 12292556000188 | FUNDO MUNICIPAL DE SAUDE DE CABO FRIO | Fundo Público Municipal | RJ Cabo Frio | 115.5 | 31 | 16 |
+| 9 | 72060999000175 | FUNDAÇÃO COPPETEC | Fundação Privada | RJ Rio de Janeiro | 111.0 | 89 | 29 |
+| 10 | 11884903000107 | FUNDO MUNICIPAL DE SAUDE DE SAO GONCALO | Fundo Público Municipal | RJ São Gonçalo | 102.9 | 26 | 13 |
+| 11 | 11384874000106 | FUNDO MUNICIPAL DE SAUDE (Campos dos Goytacazes) | Fundo Público Municipal | RJ Campos | 97.1 | 33 | 21 |
+| 12 | 42429480000150 | FUNDAÇÃO UNIVERSITÁRIA JOSÉ BONIFÁCIO | Fundação Privada | RJ Rio de Janeiro | 96.8 | 115 | 44 |
+| 13 | 03438229000109 | FUNDAÇÃO EUCLIDES DA CUNHA (FEC/UFF) | Fundação Privada | RJ Niterói | 96.8 | 122 | 42 |
+| 14 | 32690668000102 | SECRETARIA DE ESTADO DE POLÍCIA MILITAR – SEPM | Órgão Público Estadual | RJ Rio de Janeiro | 96.4 | 35 | 24 |
+| 15 | 13164086000130 | INSTITUTO REALIZANDO O FUTURO | Associação Privada | RJ Rio de Janeiro | 96.2 | 22 | 19 |
+
+Concentration: the top 300 favorecidos hold 88.4 % of the money; 703 favorecidos received ≥ R$ 1
+mi (94.8 %); 2,266 received ≥ R$ 100 k (99.2 %). By UF of the favorecido: RJ 6,997.7 · DF 4,535.0
+· SP 247.1 · MG 100.1 · GO 74.2 · SC 71.1 · PR 35.1 · unknown 34.0 (R$ mi).
+
+**Banco do Brasil caveat (36 % of the money).** The 4,005 rows (R$ 4,397 mi) with favorecido
+`00000000000191 BANCO DO BRASIL SA`, município Brasília, are 95 % função Saúde (ações "Incremento
+temporário ao custeio dos serviços de atenção básica/especializada" R$ 1,177 mi, "Apoio à
+manutenção de unidades de saúde" R$ 711 mi, "Estruturação de unidades…" R$ 617 mi): the SUS
+fundo-a-fundo transfers of the Fundo Nacional de Saúde, whose ordem bancária is issued to the
+bank that credits the municipal/state health funds. The Portal records the bank as the
+favorecido, so the real recipient (which municipal fund) is not in this file for those rows; the
+amendment's own `municipio_destino`/`localidade` is the only clue (R$ 1,719 mi of it has a
+município, R$ 2,460 mi is "múltiplo"). The pattern stops after 2024 (BB 2023 R$ 812 mi, 2024 686,
+2025 21, 2026 22) while `FUNDO MUNICIPAL DE SAUDE DE …` entries explode in 2025–2026 (Duque de
+Caxias: 2024 50.6 → 2025 84.2 → 2026 119.2), consistent with the FNS now registering the fund as
+favorecido. Any "who received" ranking must show BB as "repasse fundo a fundo via Banco do
+Brasil", not as a beneficiary. Caixa (`00360305000104`) is small: 1,305 rows, R$ 15.6 mi.
+
+### 5.2 Gap between `Valor Recebido` and `pago + rp_pago` (R$ 136.5 mi, 1.1 %)
+
+Per budget year the two agree within 0.5–3.7 % (2015 188.7 vs 187.7; 2021 912.8 vs 879.3 is the
+widest; 2026 1,427.8 vs 1,418.5). Decomposition over the 7,783 amendments:
+
+- 6,546 amendments match to the cent;
+- 92 paid amendments have **no favorecido row at all**: R$ 62.8 mi (e.g. `202171200008` Bancada
+  RJ 2021 "Reestruturação e modernização…" R$ 16.4 mi; `202441020019` 2024 R$ 6.4 mi). Spread
+  over all years and localidade types, so it is not a cutoff; most plausible is payments made by
+  documents the "por favorecido" extraction does not classify (e.g. descentralizações/TEDs to
+  other federal units, payments whose favorecido is a UG recorded elsewhere) — unverified;
+- 358 amendments received **less** than paid: R$ 77.4 mi. 142 of them have a gap < 5 % of the
+  amount (R$ 3.8 mi in total), the size of tax/contribution retentions (ISS, INSS, IR withheld
+  from suppliers go to the Receita/município, not to the favorecido). The remaining large gaps
+  concentrate in Associação Privada (R$ 28.8 mi), Empresa Pública (11.6), Município (11.0) and
+  Sociedade Empresária (10.9), localidade `uf`/`nacional` — consistent with partial devoluções
+  (GRU returns) that reduce the favorecido side, or with payments to a favorecido not yet
+  consolidated in the monthly file;
+- 54 amendments received **more** than paid: R$ 3.7 mi (e.g. `202671200008` +0.94 mi), i.e.
+  restos a pagar cancelled after payment or payments later re-classified.
+
+Transferências Especiais (RP6 "Pix"), which go straight to the município, reconcile almost
+exactly: R$ 671.1 mi received vs R$ 672.9 mi paid. Treat `Valor Recebido` as the payment-document
+view and `pago + rp_pago` as the budget-execution view; both come from the same 2026-10-09
+extraction, so there is no timing gap between them.
+
+### 5.3 Data added
+
+`data/snapshot.json` (now 15.9 MB): `favorecidos[]` (9,800 × {codigo, nome (most frequent
+spelling), natureza_juridica, tipo, uf, municipio, total_recebido, por_ano (by payment year),
+por_autor {autor_id: valor}, n_emendas}) and `recebimentos[]` (40,679 × {codigo_emenda, autor_id,
+ano_mes "YYYY-MM", favorecido_codigo, valor}); `stats.favorecidos` carries the totals above.
+
+`frontend/lib/static-data.generated.json` (894 KB, was 559 KB): `favorecidos` = top 300 by total
+({codigo, slug, nome, natureza_juridica, tipo, uf, municipio, total, por_ano, n_autores,
+n_emendas}), `favorecidos_por_tipo` and `favorecidos_por_natureza` ({n_favorecidos,
+n_recebimentos, valor}), each `autores[]` entry gets `favorecidos` (top 8 by value received from
+that author) and each `destinos[]` entry gets `favorecidos` (top 8 favorecidos **seated in** that
+município: `UF Favorecido = RJ` and `Município Favorecido` normalised against the IBGE names; one
+alias needed, `TRAJANO DE MORAIS` → Trajano de Moraes; 0 unmatched names left). `stats.favorecidos_export`.
+
+`frontend/lib/static-favorecidos/<slug>.generated.json` (1,013 files, 4.6 MB; largest Banco do
+Brasil 339 KB): rows `{c: codigo_emenda, au: autor_id, am: "YYYY-MM", v: valor, mn: município
+destino da emenda quando único, senão null}` sorted by month desc. Files are written only for
+favorecidos some list can reach (top 300 ∪ every autor top 8 ∪ every destino top 8) plus everyone
+with ≥ R$ 1 mi, because the frontend loads these via webpack dynamic `import()` over the directory
+and 9,800 chunks would be unreasonable; the remaining 8,787 favorecidos (0.8 % of the money) have
+no detail file. Each list entry carries `slug`, which is the file name.
+
+## 6. IPCA deflator (added 2026-10-14)
+
+Source: IBGE/SIDRA tabela 1737, variável 2266 "IPCA – Número-índice (base: dezembro de 1993 =
+100)", `https://apisidra.ibge.gov.br/values/t/1737/n1/all/v/2266/p/all` (JSON, 562 months from
+1979-12; first element is the header row; months not yet published come as non-numeric and are
+skipped). Cached at `data/raw/ipca_1737_2266.json` by the same fetcher. Latest month on
+2026-10-14: **2026-09**, index 7,695.82. `app/ipca.py`.
+
+Convention. `factor[Y] = index[base_month] / mean(index of the months of Y)`. Budget-year flows
+(empenho, pagamento) are spread across the year, so the average price level of the year is the
+right deflator for a yearly total: it turns "R$ X paid during 2019" into "the same purchasing
+power in 2026-09 reais". Using December would overstate the correction for money that was mostly
+spent before December. `factor_dec[Y] = index[base_month] / index[Y-12]` ("reais de dezembro de
+Y", the common convention in Brazilian fiscal reporting) is also exported so the frontend can
+offer either. For the current year the mean uses the published months (9 in 2026) and
+`factor_dec` falls back to the base month (= 1.0). All data stays nominal; the frontend multiplies.
+Payments in `recebimentos` carry a month, so a finer monthly deflation is possible later from the
+same series.
+
+| ano | factor (mean of year → 2026-09) | factor_dec (Dec of year → 2026-09) |
+|---|---:|---:|
+| 2015 | 1.7855 | 1.7128 |
+| 2016 | 1.6420 | 1.6115 |
+| 2017 | 1.5873 | 1.5653 |
+| 2018 | 1.5312 | 1.5088 |
+| 2019 | 1.4761 | 1.4465 |
+| 2020 | 1.4302 | 1.3840 |
+| 2021 | 1.3205 | 1.2575 |
+| 2022 | 1.2084 | 1.1887 |
+| 2023 | 1.1553 | 1.1362 |
+| 2024 | 1.1070 | 1.0838 |
+| 2025 | 1.0541 | 1.0395 |
+| 2026 | 1.0137 (9 months) | 1.0000 (Dec not published) |
+
+(2014 = 1.9468 / 1.8956 is also exported; the snapshot has no 2014
+authors.) Exported in the core as `ipca: {source_url, fetched_at, base_month, variable, method,
+factors, factors_dec}`. Tests: `tests/test_ipca.py` (toy series: flat year, December jump, partial
+year, missing years).
+
+## 7. How gwern.net presents inflation-adjusted money (research note, checked 2026-10-14)
+
+Sources read: https://gwern.net/style-guide (section "Currency/Inflation"), https://gwern.net/about
+(nothing on currency), https://gwern.net/subscript (section "Inflation"), the rendered HTML of
+https://gwern.net/bitcoin-is-worse-is-better, https://gwern.net/tea, https://gwern.net/blackmail
+(https://gwern.net/dnm-arrest and https://gwern.net/silk-road contain **no** adjusted amounts; their
+₿/$ figures are plain text like "₿11 (then $935)"), and in https://github.com/gwern/gwern.net:
+`build/Inflation.hs` (time-stamp 2026-04-27), `build/Config/Inflation.hs`, `css/initial.css`,
+`css/default.css`, `js/rewrite.js`.
+
+1. **Primary text = the inflation-adjusted (current-year) amount.** The nominal amount and its
+   year are demoted to a small stacked superscript/subscript right after it. `Inflation.hs`
+   rejects the usual alternatives explicitly: "the author usually settles for either replacing
+   the number, using an ad hoc currency unit like '$2012', or verbosely putting it in parentheses,
+   like '$10 ($100 in 2019)'". (The header's first example `$50.50<sub>1970</sub><sup>$343.83</sup>`
+   is stale; the code emits adjusted first:
+   `[Str "$"++adjusted, Span ("",["subsup"],[]) [Superscript [Str "$"++old], Subscript [Str oldYear]]]`.)
+
+2. **Markup.** `<span class="inflation-adjusted" data-year-original data-amount-original
+   data-year-current data-amount-current title="CPI inflation-adjusted US dollar: from nominal $N
+   in YYYY → real $N in YYYY">$ADJUSTED<span class="subsup"><sup>$NOMINAL</sup><sub>YYYY</sub></span></span>`.
+   No parentheses, no footnote; the long sentence lives in the `title` tooltip (for Bitcoin the
+   tooltip also carries the full `YYYY-MM-DD`, inline shows only the year). CSS (`initial.css`):
+   `.subsup { display: inline-flex; flex-flow: column; align-items: flex-start; vertical-align:
+   text-bottom; margin-left: 0.15em; margin-right: 0.1em; position: relative; bottom: -0.1em }
+   .subsup sup, .subsup sub { position: relative; line-height: 1; font-size: 0.6em }`; and
+   (`default.css`) `span.inflation-adjusted { white-space: nowrap } span.inflation-adjusted .subsup
+   { align-items: flex-end; bottom: 0 }` — nominal on top, year underneath, both 0.6em,
+   right-aligned, never line-broken. `rewrite.js` ("INFLATION ADJUSTMENT") then rounds for
+   display: adjusted ≥ 100 → integer; integer nominal with ≥ 2-digit adjusted → integer; strips
+   trailing `.00`; compacts the nominal with k/m/b. Copying yields `$8 [2011; $12 in 2026]`.
+
+3. **Exact examples** (server HTML, verbatim; visible text after the JS rounding in bold):
+   - bitcoin-is-worse-is-better: `<span class="inflation-adjusted" data-year-original="2011"
+     data-amount-original="8" data-year-current="2026" data-amount-current="12.42" title="CPI
+     inflation-adjusted US dollar: from nominal $8 in 2011 → real $12.42 in 2026">$12.42<span
+     class="subsup"><sup>$8</sup><sub>2011</sub></span></span>` → **$12** with ⁸ ₂₀₁₁ stacked.
+   - same page: `…data-year-original="2008" data-amount-original="500" … data-amount-current="777.66"
+     …>$777.66<span class="subsup"><sup>$500</sup><sub>2008</sub></span></span>` → **$778**.
+   - tea: `…data-year-original="2012" data-amount-original="12" … data-amount-current="18.28"
+     …>$18.28<span class="subsup"><sup>$12</sup><sub>2012</sub></span></span>` → **$18**.
+   - blackmail (Bitcoin): `<span class="inflation-adjusted" data-year-original="2013-10-01"
+     data-amount-original="111,114" data-year-current="2026" data-amount-current="31,420,185.26"
+     title="Exchange-rate-adjusted currency: ₿111,114 in 2013-10-01 → $31,420,185.26">$31,420,185.26<span
+     class="subsup"><sup>₿111,114</sup><sub>2013</sub></span></span>` → **$31,420,185**.
+
+4. **Style-guide rules** (verbatim): "Dollar/₿ prices or values should be inflation-adjusted if
+   they reflect some real transaction or amount, rather than being placeholders, especially in any
+   historical context. This includes in quotes, as the original nominal amount is still available
+   to the reader. If you buy something for '$1' in 2026, it should be written [$1]($2026) …
+   whereas if it's describing an economics or thought experiment and is just an arbitrary unit of
+   value, it should be left as-is." "Due to the extreme volatility, ₿ amounts must be written
+   with a specific YYYY-MM-DD date like [₿1](₿2026-01-01)." "Numbers over ≈1,000 or those
+   confusable with years get digit-group commas (eg. $1,234.56)". Ranges are forbidden
+   (`[$1–10]($2000)` is a fatal error; write two adjusted amounts). The style guide has **no**
+   rounding or significant-figure rule and no fixed base year; those are in code: adjustment is
+   dropped when `adjusted/nominal < 1.20` (`minPercentage = 1 + 0.20`, dollars only, so recent
+   years are shown plain), base year = year of the site build (`CM.currentYear`, pages currently
+   say 2026, so every rebuild re-bases), Haskell prints 2 decimals and the browser rounds as in
+   (2). Index: CPI 1913–1958, then PCE (BEA/FRED `DPCERG3A086NBEA`), last known annual rate
+   carried forward; Bitcoin via a historical exchange-rate table (btcvol.info) re-based to
+   current dollars.
+
+What this suggests for Emendas RJ, if the frontend adopts it: show the deflated value as the
+primary figure with the nominal and the budget year stacked small to its right, wrap the pair in
+`white-space: nowrap`, put the full sentence ("R$ X nominais em 2019 → R$ Y de set/2026, IPCA") in
+a tooltip, and skip the adjustment when the factor is below some threshold (gwern uses 1.20;
+with IPCA that would hide 2022–2026).

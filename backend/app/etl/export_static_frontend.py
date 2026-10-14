@@ -7,9 +7,13 @@ Em ``frontend/lib``:
 * ``static-autores/<autor_id>.generated.json``: as emendas (linhas) de um autor.
 * ``static-destinos/<ibge>.generated.json``: as emendas destinadas a um municipio.
 * ``static-geo.generated.json``: geometrias dos municipios do RJ (malha do IBGE), so para o mapa.
+* ``static-favorecidos/<slug>.generated.json``: os recebimentos (pagamentos mes a mes) de um favorecido,
+  so para os favorecidos que alguma lista do site alcanca (top 300 geral, top 8 por autor e por
+  destino) ou que receberam >= R$ 1 mi.
 
 Valores em reais nominais, por ano orcamentario da emenda. ``pago_total`` = pago no ano +
-restos a pagar pagos depois: o que de fato chegou ao destino ate a data do arquivo.
+restos a pagar pagos depois: o que de fato chegou ao destino ate a data do arquivo. ``ipca`` traz
+os fatores de correcao (IBGE/SIDRA) para o frontend multiplicar quando quiser reais de hoje.
 
     python -m app.etl.export_static_frontend
 """
@@ -25,8 +29,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .. import config
+from .. import config, ipca
 from ..http import fetch_file
+from ..parsers.favorecidos import slug as favorecido_slug
 
 FRONTEND_LIB = config.ROOT / "frontend" / "lib"
 IBGE_RJ_MUNICIPALITIES_GEOJSON_URL = (
@@ -36,6 +41,8 @@ IBGE_RJ_MUNICIPALITIES_GEOJSON_URL = (
 IBGE_POPULATION_2022_URL = "https://apisidra.ibge.gov.br/values/t/4714/n6/in%20n3%2033/v/93/p/2022"
 GEO_PRECISION = 4  # ~10 m; de sobra para um coropletico do estado
 TOP = 8
+TOP_FAVORECIDOS = 300
+FAVORECIDO_DETALHE_MIN = 1_000_000.0  # favorecidos acima disso sempre ganham arquivo lazy
 
 TIPO_CODES = {
     "Emenda Individual - Transferências com Finalidade Definida": "FD",
@@ -152,6 +159,110 @@ def compact(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# --- Favorecidos ---------------------------------------------------------------------------
+
+
+MUNICIPIO_ALIASES = {"TRAJANO DE MORAIS": "TRAJANO DE MORAES"}  # grafia do SIAFI -> grafia do IBGE
+
+
+def municipio_key(name: str | None) -> str:
+    key = strip_accents(name or "").upper().strip()
+    return MUNICIPIO_ALIASES.get(key, key)
+
+
+def favorecido_brief(fav: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "codigo": fav["codigo"],
+        "slug": favorecido_slug(fav["codigo"]),
+        "nome": fav["nome"],
+        "natureza_juridica": fav["natureza_juridica"],
+        "tipo": fav["tipo"],
+        "uf": fav["uf"],
+        "municipio": title_case(fav["municipio"]) if fav["municipio"] else None,
+        "total": fav["total_recebido"],
+        "por_ano": fav["por_ano"],
+        "n_autores": len(fav["por_autor"]),
+        "n_emendas": fav["n_emendas"],
+    }
+
+
+def top_favorecidos(valores: dict[str, float], fav_by_codigo: dict[str, dict[str, Any]], limit: int = TOP) -> list[dict[str, Any]]:
+    ranked = sorted(valores.items(), key=lambda pair: pair[1], reverse=True)[:limit]
+    out = []
+    for codigo, valor in ranked:
+        fav = fav_by_codigo[codigo]
+        out.append({"codigo": codigo, "slug": favorecido_slug(codigo), "nome": fav["nome"], "tipo": fav["tipo"],
+                    "valor": round(valor, 2)})
+    return out
+
+
+def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
+                        municipio_destino: dict[str, str | None]) -> dict[str, Any]:
+    """Tudo que o site mostra sobre favorecidos: top geral, agregados, top por autor e por municipio
+    (favorecidos sediados no municipio), e as linhas dos arquivos lazy."""
+
+    favorecidos: list[dict[str, Any]] = snapshot.get("favorecidos", [])
+    recebimentos: list[dict[str, Any]] = snapshot.get("recebimentos", [])
+    fav_by_codigo = {fav["codigo"]: fav for fav in favorecidos}
+
+    por_tipo: dict[str, dict[str, Any]] = defaultdict(lambda: {"n_favorecidos": 0, "n_recebimentos": 0, "valor": 0.0})
+    por_natureza: dict[str, dict[str, Any]] = defaultdict(lambda: {"n_favorecidos": 0, "n_recebimentos": 0, "valor": 0.0})
+    for fav in favorecidos:
+        for bucket in (por_tipo[fav["tipo"]], por_natureza[fav["natureza_juridica"]]):
+            bucket["n_favorecidos"] += 1
+            bucket["valor"] += fav["total_recebido"]
+
+    ibge_by_name = {municipio_key(name): code for code, name in ibge_names.items()}
+    por_autor: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    por_destino: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    linhas: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    municipios_sem_ibge: dict[str, float] = defaultdict(float)
+    for rec in recebimentos:
+        codigo = rec["favorecido_codigo"]
+        fav = fav_by_codigo[codigo]
+        for bucket in (por_tipo[fav["tipo"]], por_natureza[fav["natureza_juridica"]]):
+            bucket["n_recebimentos"] += 1
+        por_autor[rec["autor_id"]][codigo] += rec["valor"]
+        if fav["uf"] == "RJ" and fav["municipio"]:
+            ibge = ibge_by_name.get(municipio_key(fav["municipio"]))
+            if ibge:
+                por_destino[ibge][codigo] += rec["valor"]
+            else:
+                municipios_sem_ibge[fav["municipio"]] += rec["valor"]
+        linhas[codigo].append({"c": rec["codigo_emenda"], "au": rec["autor_id"], "am": rec["ano_mes"],
+                               "v": rec["valor"], "mn": municipio_destino.get(rec["codigo_emenda"])})
+
+    top = [favorecido_brief(fav) for fav in favorecidos[:TOP_FAVORECIDOS]]
+    autores = {autor_id: top_favorecidos(valores, fav_by_codigo) for autor_id, valores in por_autor.items()}
+    destinos = {ibge: top_favorecidos(valores, fav_by_codigo) for ibge, valores in por_destino.items()}
+
+    com_detalhe = {fav["codigo"] for fav in top}
+    com_detalhe.update(fav["codigo"] for fav in favorecidos if fav["total_recebido"] >= FAVORECIDO_DETALHE_MIN)
+    for lista in (*autores.values(), *destinos.values()):
+        com_detalhe.update(item["codigo"] for item in lista)
+    arquivos = {favorecido_slug(codigo): linhas[codigo] for codigo in com_detalhe}
+
+    def rounded(buckets: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {key: {**b, "valor": round(b["valor"], 2)}
+                for key, b in sorted(buckets.items(), key=lambda kv: kv[1]["valor"], reverse=True)}
+
+    return {
+        "top": top,
+        "por_tipo": rounded(por_tipo),
+        "por_natureza": rounded(por_natureza),
+        "autores": autores,
+        "destinos": destinos,
+        "arquivos": arquivos,
+        "stats": {
+            "favorecidos": len(favorecidos),
+            "recebimentos": len(recebimentos),
+            "total_recebido": round(sum(fav["total_recebido"] for fav in favorecidos), 2),
+            "com_detalhe": len(arquivos),
+            "municipios_rj_sem_ibge": {k: round(v, 2) for k, v in sorted(municipios_sem_ibge.items(), key=lambda kv: -kv[1])},
+        },
+    }
+
+
 # --- IBGE ----------------------------------------------------------------------------------
 
 
@@ -237,6 +348,11 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
         autor_id: {"nome": _display_name(meta), "partido": _latest_party(meta), "casa": meta["casa"]}
         for autor_id, meta in autores_meta.items()
     }
+    municipio_destino: dict[str, str | None] = {}
+    for row in rows:  # municipio da emenda quando e um so; None quando a emenda tem varias localidades
+        mn = title_case(row["municipio_destino"]) if row["municipio_destino"] else None
+        municipio_destino[row["codigo"]] = mn if row["codigo"] not in municipio_destino or municipio_destino[row["codigo"]] == mn else None
+    favorecidos = favorecidos_section(snapshot, names, municipio_destino)
     destino_labels = {code: {"nome": info["nome"]} for code, info in population.items()}
     funcao_labels = {name: {"nome": name} for name in por_funcao}
 
@@ -265,6 +381,7 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
                 "tipos": {code: totals.brief() for code, totals in group.tipos.items()},
                 "destinos": top(group.destinos, destino_labels),
                 "funcoes": top(group.funcoes, funcao_labels),
+                "favorecidos": favorecidos["autores"].get(autor_id, []),
             }
         )
     autores.sort(key=lambda autor: autor["totais"]["empenhado"], reverse=True)
@@ -281,6 +398,7 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
                 "por_ano": anos(group),
                 "autores": top(group.autores, autor_labels),
                 "funcoes": top(group.funcoes, funcao_labels),
+                "favorecidos": favorecidos["destinos"].get(code, []),
             }
         )
     destinos.sort(key=lambda destino: destino["totais"]["empenhado"], reverse=True)
@@ -328,8 +446,12 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
         "roster_sem_emendas": roster_sem_emendas,
         "destinos": destinos,
         "funcoes": funcoes,
+        "favorecidos": favorecidos["top"],
+        "favorecidos_por_tipo": favorecidos["por_tipo"],
+        "favorecidos_por_natureza": favorecidos["por_natureza"],
+        "ipca": ipca.load().json(),  # 2014.. so the frontend can also deflate 2014 destination-only data later
         "sources": snapshot.get("sources", []),
-        "stats": snapshot.get("stats", {}),
+        "stats": {**snapshot.get("stats", {}), "favorecidos_export": favorecidos["stats"]},
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -337,6 +459,7 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
     (out_dir / "static-geo.generated.json").write_text(_dumps(municipality_geometries(names)), encoding="utf-8")
     _write_many(out_dir / "static-autores", linhas_autor)
     _write_many(out_dir / "static-destinos", linhas_destino)
+    _write_many(out_dir / "static-favorecidos", favorecidos["arquivos"], key=lambda line: (line["am"], line["c"]), reverse=True)
     return core
 
 
@@ -361,13 +484,13 @@ def _latest_party(meta: dict[str, Any]) -> str | None:
     return meta.get("partido")
 
 
-def _write_many(directory: Path, items: dict[str, list[dict[str, Any]]]) -> None:
+def _write_many(directory: Path, items: dict[str, list[dict[str, Any]]], key: Any = None, reverse: bool = False) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     for stale in directory.glob("*.generated.json"):
         stale.unlink()
-    for key, lines in items.items():
-        lines.sort(key=lambda line: (-line["a"], line["n"]))
-        (directory / f"{key}.generated.json").write_text(_dumps(lines), encoding="utf-8")
+    for name, lines in items.items():
+        lines.sort(key=key or (lambda line: (-line["a"], line["n"])), reverse=reverse)
+        (directory / f"{name}.generated.json").write_text(_dumps(lines), encoding="utf-8")
 
 
 def _dumps(payload: object) -> str:
@@ -380,7 +503,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=FRONTEND_LIB)
     args = parser.parse_args(argv)
     core = export(args.snapshot, args.out)
+    fs = core["stats"]["favorecidos_export"]
     print(f"{len(core['autores'])} autores, {len(core['destinos'])} destinos, {len(core['funcoes'])} funcoes, anos {core['years'][0]}-{core['years'][-1]}")
+    print(f"favorecidos: {fs['favorecidos']} ({fs['com_detalhe']} com arquivo), top {len(core['favorecidos'])}, "
+          f"ipca base {core['ipca']['base_month']} fator {core['years'][0]}={core['ipca']['factors'].get(str(core['years'][0]))}")
+    if fs["municipios_rj_sem_ibge"]:
+        print("municipios RJ sem IBGE:", fs["municipios_rj_sem_ibge"])
     return 0
 
 

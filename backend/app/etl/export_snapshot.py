@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any
 
 from .. import config
+from ..favorecidos import collect_from_zip
 from ..http import fetch_file, sha256_of
+from ..parsers.favorecidos import MEMBER as FAVORECIDOS_MEMBER
 from ..match import Matcher
 from ..parsers.emendas import EmendaRow, iter_zip_member
 from ..roster import build_roster
@@ -118,12 +120,18 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
         autores.append(j)
     roster_all = [p.to_json() for p in roster.pessoas]
 
+    # Second member of the zip: payments by favorecido, only for the amendments kept above.
+    autor_by_codigo = {e["codigo"]: e["autor_id"] for e in emendas}
+    favorecidos, recebimentos, fav_stats = collect_from_zip(zip_path, autor_by_codigo)
+
     snapshot = {
         "generated_at": accessed,
         "years": sorted(years),
         "autores": autores,
         "roster": roster_all,
         "emendas": emendas,
+        "favorecidos": favorecidos,
+        "recebimentos": recebimentos,
         "agregados": {
             "por_ano": por_ano,
             "por_autor_ano": por_autor_ano,
@@ -136,6 +144,9 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
              "url": config.PORTAL_ZIP_URL, "via": config.PORTAL_UNICO_URL, "accessed_at": accessed,
              "checksum": f"sha256:{sha256_of(zip_path)}", "size_bytes": zip_path.stat().st_size,
              "rows": total_rows, "member": config.PORTAL_CSV_MEMBER},
+            {"name": "Portal da Transparencia - Emendas parlamentares, pagamentos por favorecido (same zip)",
+             "url": config.PORTAL_ZIP_URL, "accessed_at": accessed, "member": FAVORECIDOS_MEMBER,
+             "rows_kept": fav_stats["rows"]},
             *[{**s, "accessed_at": accessed} for s in roster.sources],
         ],
         "stats": {
@@ -148,6 +159,7 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
             "roster_matched": len([a for a in autores if a["id"] != "bancada-rj"]),
             "collisions": {k: sorted(v) for k, v in sorted(matcher.stats.collisions.items())},
             "unmatched_collision_names": dict(matcher.stats.unmatched_names.most_common()),
+            "favorecidos": fav_stats,
         },
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,6 +178,9 @@ def main(argv: list[str] | None = None) -> int:
     print("match:", st["match_by_quality"])
     for y, v in s["agregados"]["por_ano"].items():
         print(f"{y}: n={v['n']:5d} empenhado={v['empenhado']/1e6:10.1f}M pago={v['pago']/1e6:10.1f}M rp_pago={v['rp_pago']/1e6:8.1f}M")
+    fs = st["favorecidos"]
+    print(f"favorecidos: rows={fs['rows']} distinct={fs['favorecidos']} emendas={fs['emendas_com_favorecido']}"
+          f" total={fs['total_recebido']/1e6:.1f}M meses {fs['ano_mes_min']}..{fs['ano_mes_max']}")
     print(f"wrote {a.out} ({a.out.stat().st_size/1e6:.1f} MB)")
     return 0
 
