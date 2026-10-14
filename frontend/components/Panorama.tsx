@@ -13,7 +13,6 @@ import {
   METRICS,
   TIPO_LABELS,
   displayName,
-  formatBRL,
   formatInt,
   getAutores,
   getByTipo,
@@ -22,7 +21,6 @@ import {
   getDestinos,
   getFavorecidos,
   getFuncoes,
-  getOutrosDestinos,
   getTotals,
   getYears,
   niceName,
@@ -31,8 +29,6 @@ import {
   type Brief,
   type Metric
 } from "@/lib/static-api";
-
-const ZERO: Brief = { n: 0, empenhado: 0, pago_total: 0 };
 
 export function Panorama() {
   const years = getYears();
@@ -92,7 +88,6 @@ export function Panorama() {
         .slice(0, 12),
     [real, year]
   );
-  const outros = getOutrosDestinos();
   const yearLabel = year === "all" ? `${years[0]}–${years[years.length - 1]}` : String(year);
   const autoresComEmenda = getAutores().filter((autor) => valueFor(autor.por_ano, autor.totais, year, "empenhado") > 0).length;
 

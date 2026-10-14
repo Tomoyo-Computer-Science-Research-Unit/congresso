@@ -58,6 +58,14 @@ UF_SIGLAS = {
 }
 SMALL_WORDS = {"de", "da", "do", "das", "dos", "e", "d"}
 SEM_FUNCAO = "Sem função informada"
+OUTROS_DESTINOS = {
+    "uf": "Estado do Rio de Janeiro, sem município",
+    "multiplo": "Vários municípios",
+    "nacional": "Nacional",
+    "exterior": "Exterior",
+    "outro": "Região",
+    "outras_ufs": "Outros estados",
+}
 VALUE_KEYS = ("empenhado", "liquidado", "pago", "rp_pago")
 
 
@@ -338,7 +346,7 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
     por_funcao: dict[str, Group] = defaultdict(Group)
     linhas_autor: dict[str, list[dict[str, Any]]] = defaultdict(list)
     linhas_destino: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    outros_destinos: dict[str, Totals] = defaultdict(Totals)
+    outros_destinos: dict[str, Group] = defaultdict(Group)
 
     for row in rows:
         overall.add(row)
@@ -347,6 +355,8 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
         linhas_autor[row["autor_id"]].append(compact(row))
         ibge = row["municipio_destino_ibge"]
         uf_code = str(row.get("uf_destino_ibge") or "")[:2]
+        if uf_code not in UF_SIGLAS:
+            uf_code = ""  # "-1" e vazio: destino nacional, exterior ou sem UF informada
         if ibge and uf_code == "33":
             por_destino[ibge].add(row)
             linhas_destino[ibge].append(compact(row))
@@ -454,7 +464,17 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
             code: {str(year): totals.brief() for year, totals in sorted(group.por_ano.items())}
             for code, group in _by_tipo(rows).items()
         },
-        "outros_destinos": {key: totals.json() for key, totals in outros_destinos.items()},
+        # Destinos sem município: estado, vários municípios, nacional, exterior, outros estados.
+        "outros_destinos": {
+            key: {
+                "nome": OUTROS_DESTINOS.get(key, key),
+                "totais": group.total.json(),
+                "por_ano": anos(group),
+                "autores": top(group.autores, autor_labels),
+                "funcoes": top(group.funcoes, funcao_labels),
+            }
+            for key, group in outros_destinos.items()
+        },
         "autores": autores,
         "roster_sem_emendas": roster_sem_emendas,
         "destinos": destinos,

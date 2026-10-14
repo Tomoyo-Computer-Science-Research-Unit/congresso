@@ -164,9 +164,11 @@ export function AutoresExplorer() {
             <span>
               <b className="serif text-[16px]">{displayName(selected)}</b>
               <span className="mt-0.5 block text-[10.5px] tracking-[0.12em] text-ash">
-                {[titleCase(selected.nome ?? ""), selected.partido, selected.casas.map((item) => CASA_LABELS[item] ?? item).join(" e "), selected.legislaturas.length ? `legislaturas ${selected.legislaturas.join(", ")}` : null, selected.codigos_siafi.length ? `SIAFI ${selected.codigos_siafi.join(", ")}` : null]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {selected.id === "bancada-rj"
+                  ? "emendas de bancada (RP 7): coletivas, propostas pela bancada federal do RJ, sem autor individual · código SIAFI 7120"
+                  : [titleCase(selected.nome ?? ""), selected.partido, selected.casas.map((item) => CASA_LABELS[item] ?? item).join(" e "), selected.legislaturas.length ? `legislaturas ${selected.legislaturas.join(", ")}` : null, selected.codigos_siafi.length ? `SIAFI ${selected.codigos_siafi.join(", ")}` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
               </span>
             </span>
           </span>

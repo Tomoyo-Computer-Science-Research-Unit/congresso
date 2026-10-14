@@ -14,6 +14,7 @@ import {
   formatBRL,
   formatInt,
   getDestinos,
+  getOutrosDestinos,
   getYears,
   loadGeo,
   niceName,
@@ -69,7 +70,15 @@ function coordinates(geometry: Geometry): number[][] {
 
 export function DestinosExplorer() {
   const years = getYears();
-  const all = getDestinos();
+  const outros = getOutrosDestinos();
+  // Destinos sem município entram no ranking como itens sem polígono nem população.
+  const all = useMemo<Destino[]>(
+    () => [
+      ...getDestinos(),
+      ...Object.entries(outros).map(([key, item]) => ({ ibge: key, nome: item.nome, populacao_2022: null, totais: item.totais, por_ano: item.por_ano, autores: item.autores, funcoes: item.funcoes, favorecidos: [] }))
+    ],
+    [outros]
+  );
   const { mode: money } = useMoneyMode();
   const [metric, setMetric] = useState<Metric>("empenhado");
   const [mode, setMode] = useState<Mode>("total");
@@ -103,9 +112,9 @@ export function DestinosExplorer() {
     () =>
       all
         .map((destino) => ({ destino, value: valueOf(destino) }))
-        .filter((row) => row.value > 0 || row.destino.ibge === selectedIbge)
+        .filter((row) => (row.value > 0 && (mode === "total" || row.destino.populacao_2022)) || row.destino.ibge === selectedIbge)
         .sort((a, b) => b.value - a.value),
-    [all, selectedIbge, valueOf]
+    [all, mode, selectedIbge, valueOf]
   );
   const rankByIbge = useMemo(() => new Map(list.map((row, position) => [row.destino.ibge, { position, value: row.value }])), [list]);
   const selected = all.find((item) => item.ibge === selectedIbge) ?? all[0];
@@ -179,11 +188,11 @@ export function DestinosExplorer() {
                   <path
                     key={ibge}
                     d={geometryPath(feature.geometry as Geometry, bbox)}
-                    fill={has ? "var(--ink)" : "var(--paper)"}
-                    fillOpacity={has ? opacity : 1}
+                    fill={has && !isSelected ? "var(--ink)" : "var(--paper)"}
+                    fillOpacity={has && !isSelected ? opacity : 1}
                     stroke={isSelected ? "var(--ink)" : has ? "var(--paper)" : "var(--line-strong)"}
-                    strokeWidth={isSelected ? 2.4 : 0.8}
-                    strokeDasharray={has || isSelected ? undefined : "3 3"}
+                    strokeWidth={isSelected ? 2 : 0.8}
+                    strokeDasharray={has && !isSelected ? undefined : isSelected ? "5 3" : "3 3"}
                     className="map-shape cursor-pointer"
                     onClick={() => setSelectedIbge(ibge)}
                     tabIndex={0}
@@ -210,7 +219,7 @@ export function DestinosExplorer() {
           rows={list.map(({ destino, value }) => ({
             key: destino.ibge,
             label: destino.nome,
-            sub: destino.populacao_2022 ? `${formatInt(destino.populacao_2022)} hab.` : undefined,
+            sub: destino.populacao_2022 ? `${formatInt(destino.populacao_2022)} hab.` : "sem município",
             value,
             valueNode: mode === "per_capita" ? undefined : <GroupMoney porAno={destino.por_ano} totais={destino.totais} year={year} metric={metric} />,
             selected: destino.ibge === selected?.ibge,
@@ -225,8 +234,14 @@ export function DestinosExplorer() {
             <div>
               <Stat label="Empenhado" value={<GroupMoney porAno={selected.por_ano} totais={selected.totais} year={year} metric="empenhado" />} />
               <Stat label="Pago, incl. restos a pagar" value={<GroupMoney porAno={selected.por_ano} totais={selected.totais} year={year} metric="pago_total" />} />
-              <Stat label="Por habitante (2022)" value={selected.populacao_2022 ? `${formatBRL(valueIn(money, selected.por_ano, selected.totais, year, metric) / selected.populacao_2022, 0)}` : "–"} />
-              <Stat label="População 2022" value={formatInt(selected.populacao_2022)} />
+              {selected.populacao_2022 ? (
+                <>
+                  <Stat label="Por habitante (2022)" value={formatBRL(valueIn(money, selected.por_ano, selected.totais, year, metric) / selected.populacao_2022, 0)} />
+                  <Stat label="População 2022" value={formatInt(selected.populacao_2022)} />
+                </>
+              ) : (
+                <Stat label="Linhas de emenda" value={formatInt(selected.totais.n)} />
+              )}
             </div>
             <div className="-my-1 min-h-0 overflow-auto">
               <BarList
@@ -241,6 +256,17 @@ export function DestinosExplorer() {
               />
             </div>
             <div className="-my-1 min-h-0 overflow-auto">
+              {selected.populacao_2022 === null ? (
+                <BarList
+                  rows={selected.funcoes.slice(0, 5).map((row) => ({
+                    key: row.id,
+                    label: row.nome ?? row.id,
+                    value: valueIn(money, row.por_ano ?? {}, row, "all", metric),
+                    valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year="all" metric={metric} />,
+                    href: `/funcoes?f=${encodeURIComponent(row.id)}`
+                  }))}
+                />
+              ) : (
               <BarList
                 rows={(selected.favorecidos ?? []).slice(0, 5).map((row) => ({
                   key: row.codigo,
@@ -251,6 +277,7 @@ export function DestinosExplorer() {
                 }))}
                 empty="SEM FAVORECIDO SEDIADO AQUI"
               />
+              )}
             </div>
           </div>
         </Panel>

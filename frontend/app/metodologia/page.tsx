@@ -75,8 +75,10 @@ export default function MethodPage() {
             <h3 className="serif text-[15px] text-ink">Bancada</h3>
             <p>
               Bancada fluminense é quem exerceu mandato federal pelo Rio de Janeiro, como titular ou suplente em exercício, nas legislaturas 54 a 57 (2011 a 2027).
-              A lista vem das APIs de dados abertos da Câmara dos Deputados e do Senado Federal: 158 pessoas, 130 delas com alguma emenda executada. As emendas
-              de bancada (código SIAFI 7120, “Bancada do Rio de Janeiro”) entram como um autor coletivo, sem atribuição a pessoas.
+              A lista vem das APIs de dados abertos da Câmara dos Deputados e do Senado Federal: 158 pessoas, 130 delas com alguma emenda executada. “Bancada do Rio de
+              Janeiro” (código SIAFI 7120) são as emendas de bancada estadual, RP 7: propostas em nome do conjunto dos deputados federais e senadores do
+              estado, decididas pela coordenação da bancada, impositivas desde 2019 e voltadas a projetos de maior porte. Entram aqui como um autor coletivo,
+              sem atribuição a pessoas.
             </p>
           </section>
           <section>

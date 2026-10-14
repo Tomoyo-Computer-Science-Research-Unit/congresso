@@ -47,6 +47,8 @@ export type Destino = {
   funcoes: Ranked[];
   favorecidos?: FavorecidoRef[];
 };
+/** Destino sem município: estado, vários municípios, nacional, exterior, outros estados. */
+export type OutroDestino = { nome: string; totais: Totais; por_ano: Record<string, Brief>; autores: Ranked[]; funcoes: Ranked[] };
 export type Funcao = {
   nome: string;
   totais: Totais;
@@ -99,7 +101,7 @@ type Core = {
   por_ano: Record<string, Totais>;
   por_tipo: Record<string, Totais>;
   por_tipo_ano: Record<string, Record<string, Brief>>;
-  outros_destinos: Record<string, Totais>;
+  outros_destinos: Record<string, OutroDestino>;
   autores: Autor[];
   roster_sem_emendas: RosterPerson[];
   destinos: Destino[];
@@ -165,7 +167,7 @@ export function getByTipo(): Record<string, Totais> {
 export function getByTipoYear(): Record<string, Record<string, Brief>> {
   return DATA.por_tipo_ano;
 }
-export function getOutrosDestinos(): Record<string, Totais> {
+export function getOutrosDestinos(): Record<string, OutroDestino> {
   return DATA.outros_destinos;
 }
 export function getAutores(): Autor[] {
