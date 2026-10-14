@@ -140,12 +140,11 @@ export function FavorecidosExplorer() {
   if (!selected) {
     return <EmptyState>SEM FAVORECIDOS</EmptyState>;
   }
-  const isBB = selected.codigo === BB_CODIGO;
   const anos = Object.keys(selected.por_ano).map(Number);
 
   return (
     <Screen columns="360px minmax(0, 1fr) minmax(0, 1fr)" rows="auto minmax(0, 1fr) minmax(0, 1.2fr)">
-      <Panel title={<b>Favorecidos</b>} aside={<Segmented label="Grupo" value={grupo} options={GRUPOS} onChange={setGrupo} />} flush fill style={{ gridRow: "1 / span 3" }} foot={`${list.length} dos 300 maiores; juntos, os 300 recebem 88% do total pago.`}>
+      <Panel title={<b>Favorecidos</b>} aside={<Segmented label="Grupo" value={grupo} options={GRUPOS} onChange={setGrupo} />} flush fill style={{ gridRow: "1 / span 3" }}>
         <ul className="menu" role="listbox" aria-label="Favorecidos">
           {list.map(({ item, value }) => (
             <li key={item.slug} role="presentation">
@@ -175,7 +174,6 @@ export function FavorecidosExplorer() {
           </span>
         }
         style={{ gridColumn: "2 / span 2" }}
-        foot={isBB ? "Repasses fundo a fundo do SUS têm o Banco do Brasil como favorecido na ordem bancária; o fundo municipal de saúde que recebeu não aparece nestas linhas." : undefined}
       >
         <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-6">
           <div>

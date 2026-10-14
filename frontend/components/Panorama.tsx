@@ -122,18 +122,6 @@ export function Panorama() {
           </>
         }
         style={{ gridColumn: "1 / span 2" }}
-        foot={
-          <span>
-            {Object.entries(tipos)
-              .sort((a, b) => b[1][metric] - a[1][metric])
-              .map(([code, value], index) => (
-                <span key={code}>
-                  {index ? " · " : ""}
-                  {TIPO_LABELS[code] ?? code} <GroupMoney porAno={tipoAnos[code] ?? {}} totais={value} year={year} metric={metric} />
-                </span>
-              ))}
-          </span>
-        }
       >
         <div className="grid grid-cols-[280px_minmax(0,1fr)] gap-6">
           <div>
@@ -159,7 +147,7 @@ export function Panorama() {
             }))}
           />
         </Panel>
-        <Panel title={<b>Favorecidos</b>} flush fill foot="Por ano de pagamento. Banco do Brasil é o caixa dos repasses fundo a fundo do SUS, não o destinatário final.">
+        <Panel title={<b>Favorecidos</b>} flush fill>
           <BarList
             rows={favorecidos.map(({ favorecido, value, nominal }) => ({
               key: favorecido.codigo,
@@ -189,12 +177,6 @@ export function Panorama() {
         title={<b>Municípios de destino</b>}
         flush
         fill
-        foot={
-          <span>
-            Fora de município, nominal, todo o período: estado {formatBRL((outros.uf ?? ZERO)[metric])}, múltiplos {formatBRL((outros.multiplo ?? ZERO)[metric])}, outros estados{" "}
-            {formatBRL((outros.outras_ufs ?? ZERO)[metric])}.
-          </span>
-        }
       >
         <BarList
           rows={destinos.map(({ destino, value }) => ({

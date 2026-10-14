@@ -130,7 +130,7 @@ export default function MethodPage() {
         </table>
       </Panel>
 
-      <Panel title={<b>Sem emenda executada</b>} flush fill foot={`${roster.length} dos 158 da bancada; quase todos suplentes de passagem curta ou só da legislatura 54.`}>
+      <Panel title={<b>Sem emenda executada</b>} flush fill>
         <table className="ruled">
           <tbody>
             {roster.map((person) => (

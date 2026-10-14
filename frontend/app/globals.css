@@ -969,3 +969,8 @@ html.fx[data-theme="dark"] .map-wrap {
   overflow: visible;
   text-overflow: clip;
 }
+
+/* Painéis que preenchem a linha rolam por dentro: listas, menus e tabelas compridas. */
+.panel__body--fill {
+  overflow: auto;
+}

@@ -15,7 +15,6 @@ import {
   displayName,
   formatInt,
   getAutores,
-  getRosterSemEmendas,
   getYears,
   loadLinhasAutor,
   niceName,
@@ -118,7 +117,6 @@ export function AutoresExplorer() {
     return <EmptyState>SEM AUTORES</EmptyState>;
   }
   const activeTotal = year === "all" ? selected.totais : (selected.por_ano[String(year)] ?? { n: 0, empenhado: 0, pago_total: 0 });
-  const semEmendas = getRosterSemEmendas();
 
   return (
     <Screen columns="320px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)" rows="auto minmax(0, 1fr) minmax(0, 1.4fr)">
@@ -128,7 +126,6 @@ export function AutoresExplorer() {
         flush
         fill
         style={{ gridRow: "1 / span 3" }}
-        foot={`${list.length} com emenda no recorte; ${semEmendas.length} da bancada sem emenda executada no período.`}
       >
         <div className="flex items-center gap-2 border-b border-line p-2">
           <select className="yearselect" aria-label="Partido" value={partido} onChange={(event) => setPartido(event.target.value)}>
@@ -217,7 +214,7 @@ export function AutoresExplorer() {
           }))}
         />
       </Panel>
-      <Panel title={<b>Favorecidos</b>} flush fill foot="Recebido, nominal; BB é o caixa dos repasses fundo a fundo do SUS.">
+      <Panel title={<b>Favorecidos</b>} flush fill>
         <BarList
           rows={(selected.favorecidos ?? []).map((row) => ({
             key: row.codigo,
