@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const pages = ["/", "/autores", "/destinos", "/funcoes", "/metodologia"];
+const pages = ["/", "/autores", "/destinos", "/funcoes", "/favorecidos", "/metodologia", "/status"];
 
 test.describe("static pages", () => {
   for (const path of pages) {
@@ -40,6 +40,15 @@ test("destinations map draws the municipalities", async ({ page }) => {
   await page.goto("/destinos?m=3303302");
   await expect.poll(async () => page.locator("svg[role=img] path").count(), { timeout: 15_000 }).toBeGreaterThan(80);
   await expect(page.getByRole("heading", { level: 2 }).or(page.locator(".panel__head")).filter({ hasText: "Niterói" }).first()).toBeVisible();
+});
+
+test("favorecido payments load on demand and N toggles nominal", async ({ page }) => {
+  await page.goto("/favorecidos?f=11128809000110");
+  await expect(page.getByRole("listbox", { name: "Favorecidos" }).getByRole("option", { selected: true })).toContainText("Duque de Caxias");
+  await expect.poll(async () => page.locator("table.ruled tbody tr").count(), { timeout: 15_000 }).toBeGreaterThan(5);
+  await expect(page.locator(".money").first()).toBeVisible();
+  await page.keyboard.press("n");
+  await expect(page.locator(".money")).toHaveCount(0);
 });
 
 test("hotkeys switch screens", async ({ page }) => {

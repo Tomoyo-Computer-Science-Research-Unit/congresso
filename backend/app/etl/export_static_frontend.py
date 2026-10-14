@@ -85,6 +85,8 @@ class Totals:
         self.n = 0
         self.codigos: set[str] = set()
         self.values = {key: 0.0 for key in VALUE_KEYS}
+        # empenhado e pago_total por ano, para o frontend deflacionar ano a ano (IPCA).
+        self.por_ano: dict[int, list[float]] = {}
 
     def add(self, row: dict[str, Any]) -> None:
         self.n += 1
@@ -93,6 +95,9 @@ class Totals:
         self.values["liquidado"] += row["valor_liquidado"]
         self.values["pago"] += row["valor_pago"]
         self.values["rp_pago"] += row["rp_pago"]
+        year = self.por_ano.setdefault(int(row["ano"]), [0.0, 0.0])
+        year[0] += row["valor_empenhado"]
+        year[1] += row["valor_pago"] + row["rp_pago"]
 
     def json(self) -> dict[str, Any]:
         return {
@@ -109,6 +114,14 @@ class Totals:
             "n": self.n,
             "empenhado": round(self.values["empenhado"], 2),
             "pago_total": round(self.values["pago"] + self.values["rp_pago"], 2),
+        }
+
+    def ranked(self) -> dict[str, Any]:
+        """brief() mais a quebra anual, para listas em que o frontend soma anos deflacionados."""
+
+        return {
+            **self.brief(),
+            "por_ano": {str(year): {"empenhado": round(pair[0], 2), "pago_total": round(pair[1], 2)} for year, pair in sorted(self.por_ano.items())},
         }
 
 
@@ -135,7 +148,7 @@ class Group:
 
 def top(items: dict[str, Totals], label: dict[str, Any] | None = None, limit: int = TOP) -> list[dict[str, Any]]:
     ranked = sorted(items.items(), key=lambda pair: pair[1].values["empenhado"], reverse=True)[:limit]
-    return [{"id": key, **(label or {}).get(key, {}), **totals.brief()} for key, totals in ranked]
+    return [{"id": key, **(label or {}).get(key, {}), **totals.ranked()} for key, totals in ranked]
 
 
 def compact(row: dict[str, Any]) -> dict[str, Any]:

@@ -6,19 +6,20 @@ import { useScreenHotkeys } from "@/components/Hotkeys";
 import { EmptyState, Panel, Screen, Segmented, Stat } from "@/components/ui";
 import { YearBars } from "@/components/YearBars";
 import { YearSelect, stepYear, type YearSel } from "@/components/YearSelect";
+import { GroupMoney, Money, MoneySum, adjust, useMoneyMode, valueIn } from "@/lib/money";
 import {
+  BB_CODIGO,
   CASA_LABELS,
   LOCALIDADE_LABELS,
   METRICS,
   displayName,
-  formatBRL,
   formatInt,
   getAutores,
   getRosterSemEmendas,
   getYears,
   loadLinhasAutor,
+  niceName,
   titleCase,
-  valueFor,
   yearPoints,
   type Linha,
   type Metric
@@ -35,6 +36,7 @@ const CASAS: Array<{ value: Casa; label: string }> = [
 export function AutoresExplorer() {
   const years = getYears();
   const all = getAutores();
+  const { mode, real } = useMoneyMode();
   const [casa, setCasa] = useState<Casa>("all");
   const [metric, setMetric] = useState<Metric>("empenhado");
   const [year, setYear] = useState<YearSel>("all");
@@ -64,10 +66,10 @@ export function AutoresExplorer() {
     () =>
       all
         .filter((autor) => casa === "all" || autor.casa === casa || autor.casas.includes(casa))
-        .map((autor) => ({ autor, value: valueFor(autor.por_ano, autor.totais, year, metric) }))
+        .map((autor) => ({ autor, value: valueIn(mode, autor.por_ano, autor.totais, year, metric) }))
         .filter((row) => row.value > 0 || row.autor.id === selectedId)
         .sort((a, b) => b.value - a.value),
-    [all, casa, metric, selectedId, year]
+    [all, casa, metric, mode, selectedId, year]
   );
   const selected = all.find((autor) => autor.id === selectedId) ?? all[0];
   const index = Math.max(0, list.findIndex((row) => row.autor.id === selected?.id));
@@ -88,7 +90,11 @@ export function AutoresExplorer() {
     };
   }, [selected]);
 
-  const points = useMemo(() => (selected ? yearPoints(selected.por_ano, years) : []), [selected, years]);
+  const nominalPoints = useMemo(() => (selected ? yearPoints(selected.por_ano, years) : []), [selected, years]);
+  const points = useMemo(
+    () => (real ? nominalPoints.map((point) => ({ ...point, empenhado: adjust(point.empenhado, point.year), pago_total: adjust(point.pago_total, point.year) })) : nominalPoints),
+    [nominalPoints, real]
+  );
   const visibleLinhas = useMemo(() => (linhas ?? []).filter((linha) => year === "all" || linha.a === year), [linhas, year]);
 
   const hotkeys = useMemo(
@@ -108,11 +114,11 @@ export function AutoresExplorer() {
   if (!selected) {
     return <EmptyState>SEM AUTORES</EmptyState>;
   }
-  const activeTotal = year === "all" ? selected.totais : { ...selected.por_ano[String(year)], emendas: selected.por_ano[String(year)]?.n ?? 0 };
+  const activeTotal = year === "all" ? selected.totais : (selected.por_ano[String(year)] ?? { n: 0, empenhado: 0, pago_total: 0 });
   const semEmendas = getRosterSemEmendas();
 
   return (
-    <Screen columns="320px minmax(0, 1fr) minmax(0, 1fr)" rows="auto minmax(0, 1fr) minmax(0, 1.2fr)">
+    <Screen columns="320px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)" rows="auto minmax(0, 1fr) minmax(0, 1.2fr)">
       <Panel
         title={<b>Autores</b>}
         aside={<Segmented label="Casa" value={casa} options={CASAS} onChange={setCasa} />}
@@ -129,7 +135,9 @@ export function AutoresExplorer() {
                   {displayName(autor)}
                   <span className="faint ml-1.5 text-[10px] tracking-[0.08em]">{autor.partido}</span>
                 </span>
-                <span className="num">{formatBRL(value)}</span>
+                <span className="num">
+                  <GroupMoney porAno={autor.por_ano} totais={autor.totais} year={year} metric={metric} />
+                </span>
               </button>
             </li>
           ))}
@@ -159,30 +167,58 @@ export function AutoresExplorer() {
             <Segmented label="Métrica" value={metric} options={METRICS.map((item) => ({ value: item.key, label: item.label }))} onChange={setMetric} />
           </>
         }
-        style={{ gridColumn: "2 / span 2" }}
+        style={{ gridColumn: "2 / span 3" }}
       >
-        <div className="grid grid-cols-[240px_minmax(0,1fr)] gap-6">
+        <div className="grid grid-cols-[280px_minmax(0,1fr)] gap-6">
           <div>
-            <Stat label={year === "all" ? "Empenhado" : `Empenhado em ${year}`} value={formatBRL(activeTotal.empenhado)} />
-            <Stat label="Pago, incl. restos a pagar" value={formatBRL(activeTotal.pago_total)} />
+            <Stat label={year === "all" ? "Empenhado" : `Empenhado em ${year}`} value={<GroupMoney porAno={selected.por_ano} totais={selected.totais} year={year} metric="empenhado" />} />
+            <Stat label="Pago, incl. restos a pagar" value={<GroupMoney porAno={selected.por_ano} totais={selected.totais} year={year} metric="pago_total" />} />
             <Stat label="Linhas de emenda" value={formatInt(activeTotal.n)} />
-            {Object.entries(selected.tipos).map(([code, value]) => (
-              <Stat key={code} label={TIPO_SHORT[code] ?? code} value={formatBRL(value[metric])} />
-            ))}
+            {year === "all"
+              ? Object.entries(selected.tipos).map(([code, value]) => <Stat key={code} label={TIPO_SHORT[code] ?? code} value={<MoneySum real={value[metric]} nominal={value[metric]} />} />)
+              : null}
             <Stat label="Códigos SIAFI" value={selected.codigos_siafi.join(", ") || "–"} />
           </div>
-          <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={170} />
+          <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={170} nominal={real ? Object.fromEntries(nominalPoints.map((point) => [point.year, point])) : undefined} />
         </div>
       </Panel>
 
       <Panel title={<b>Destinos</b>} flush fill>
-        <BarList rows={selected.destinos.map((row) => ({ key: row.id, label: row.nome ?? row.id, value: row[metric], href: `/destinos?m=${row.id}` }))} />
+        <BarList
+          rows={selected.destinos.map((row) => ({
+            key: row.id,
+            label: row.nome ?? row.id,
+            value: valueIn(mode, row.por_ano ?? {}, row, "all", metric),
+            valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year="all" metric={metric} />,
+            href: `/destinos?m=${row.id}`
+          }))}
+        />
       </Panel>
       <Panel title={<b>Funções</b>} flush fill>
-        <BarList rows={selected.funcoes.map((row) => ({ key: row.id, label: row.nome ?? row.id, value: row[metric], href: `/funcoes?f=${encodeURIComponent(row.id)}` }))} />
+        <BarList
+          rows={selected.funcoes.map((row) => ({
+            key: row.id,
+            label: row.nome ?? row.id,
+            value: valueIn(mode, row.por_ano ?? {}, row, "all", metric),
+            valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year="all" metric={metric} />,
+            href: `/funcoes?f=${encodeURIComponent(row.id)}`
+          }))}
+        />
+      </Panel>
+      <Panel title={<b>Favorecidos</b>} flush fill foot="Recebido, nominal; BB é o caixa dos repasses fundo a fundo do SUS.">
+        <BarList
+          rows={(selected.favorecidos ?? []).map((row) => ({
+            key: row.codigo,
+            label: niceName(row.nome),
+            sub: row.codigo === BB_CODIGO ? "repasse fundo a fundo via BB" : row.tipo ?? undefined,
+            value: row.valor,
+            href: `/favorecidos?f=${encodeURIComponent(row.slug)}`
+          }))}
+          empty="SEM PAGAMENTO REGISTRADO"
+        />
       </Panel>
 
-      <Panel title={<b>Emendas</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">{linhas ? `${visibleLinhas.length} linhas` : "carregando"}</span>} flush fill style={{ gridColumn: "2 / span 2" }}>
+      <Panel title={<b>Emendas</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">{linhas ? `${visibleLinhas.length} linhas` : "carregando"}</span>} flush fill style={{ gridColumn: "2 / span 3" }}>
         {linhas && visibleLinhas.length === 0 ? (
           <EmptyState>SEM EMENDAS NESTE ANO</EmptyState>
         ) : (
@@ -205,17 +241,21 @@ export function AutoresExplorer() {
                   <td className="num">{linha.a}</td>
                   <td className="num faint">{linha.n}</td>
                   <td className="faint">{linha.t}</td>
-                  <td className="max-w-[180px] truncate" title={linha.mn ?? undefined}>
+                  <td className="max-w-[150px] truncate" title={linha.mn ?? undefined}>
                     {linha.mn ? `${linha.mn}${linha.uf && linha.uf !== "RJ" ? ` (${linha.uf})` : ""}` : LOCALIDADE_LABELS[linha.loc] ?? linha.loc}
                   </td>
-                  <td className="max-w-[140px] truncate" title={linha.sf}>
+                  <td className="max-w-[120px] truncate" title={linha.sf}>
                     {linha.f}
                   </td>
-                  <td className="max-w-[320px] truncate text-ash" title={linha.ac}>
+                  <td className="max-w-[220px] truncate text-ash" title={linha.ac}>
                     {titleCase(linha.ac)}
                   </td>
-                  <td className="num right">{formatBRL(linha.e)}</td>
-                  <td className="num right">{formatBRL(linha.p + linha.rp)}</td>
+                  <td className="num right">
+                    <Money nominal={linha.e} year={linha.a} />
+                  </td>
+                  <td className="num right">
+                    <Money nominal={linha.p + linha.rp} year={linha.a} />
+                  </td>
                 </tr>
               ))}
             </tbody>

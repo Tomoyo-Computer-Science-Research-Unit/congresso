@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { baseMonthLabel, useMoneyMode } from "@/lib/money";
 
 const HINTS: Record<string, Array<[string, string]>> = {
   "/": [
@@ -23,13 +24,19 @@ const HINTS: Record<string, Array<[string, string]>> = {
     ["↑↓", "função"],
     ["m", "métrica"]
   ],
-  "/metodologia": []
+  "/favorecidos": [
+    ["↑↓", "favorecido"],
+    ["g", "grupo"]
+  ],
+  "/metodologia": [],
+  "/status": []
 };
 
 export function StatusBar({ latestLabel }: { latestLabel: string }) {
   const pathname = usePathname();
   const base = pathname.replace(/\/+$/, "") || "/";
   const hints = HINTS[base] ?? [];
+  const { real } = useMoneyMode();
 
   return (
     <footer className="statusbar">
@@ -41,7 +48,11 @@ export function StatusBar({ latestLabel }: { latestLabel: string }) {
           </span>
         ))}
         <span>
-          <span className="kbd">1–5</span>telas
+          <span className="kbd">n</span>
+          {real ? "nominal" : `R$ de ${baseMonthLabel()}`}
+        </span>
+        <span>
+          <span className="kbd">1–6</span>telas
         </span>
         <span>
           <span className="kbd">t</span>tema
@@ -50,7 +61,10 @@ export function StatusBar({ latestLabel }: { latestLabel: string }) {
           <span className="kbd">f</span>efeitos
         </span>
       </span>
-      <span className="num">{latestLabel}</span>
+      <span className="num">
+        {real ? `R$ de ${baseMonthLabel()} · ` : "R$ nominais · "}
+        {latestLabel}
+      </span>
     </footer>
   );
 }

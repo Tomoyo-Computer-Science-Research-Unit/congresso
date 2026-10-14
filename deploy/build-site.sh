@@ -40,10 +40,17 @@ notify() {
     | docker exec -i mailserver sendmail -t || log "aviso por e-mail falhou"
 }
 
+write_status() {
+  if [ -x "${PY:-}" ]; then
+    (cd "$SRC/backend" && "$PY" -m app.etl.write_status --runs "$RUNS" --out "$DIR/site$BASE_PATH/status.json") || log "status.json falhou"
+  fi
+}
+
 on_error() {
   log "falhou na linha $1"
   record "falhou" "linha $1"
   notify "[emendas-rj] rodada falhou" "O build-emendas.sh parou na linha $1 em $(hostname). Veja $DIR/build-emendas.log."
+  write_status
 }
 trap 'on_error $LINENO' ERR
 
@@ -95,6 +102,7 @@ EOF
 if [ "${FORCE:-0}" != "1" ] && [ -f "$MARK" ] && [ "$(cat "$MARK")" = "$key" ]; then
   log "sem mudança ($key)"
   record "sem mudança" "$note"
+  write_status
   exit 0
 fi
 
@@ -104,4 +112,5 @@ mkdir -p "$DIR/site$BASE_PATH"
 rsync -a --delete --chmod=D755,F644 "$SRC/frontend/out/" "$DIR/site$BASE_PATH/"
 echo "$key" > "$MARK"
 record "publicado" "$note"
+write_status
 log "publicado ($key)"

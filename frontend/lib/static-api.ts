@@ -18,7 +18,7 @@ export type Totais = {
 };
 /** Resumo usado em séries anuais e rankings. */
 export type Brief = { n: number; empenhado: number; pago_total: number };
-export type Ranked = Brief & { id: string; nome?: string; partido?: string | null; casa?: string | null };
+export type Ranked = Brief & { id: string; nome?: string; partido?: string | null; casa?: string | null; por_ano?: Record<string, Brief> };
 export type Autor = {
   id: string;
   nome: string | null;
@@ -35,6 +35,7 @@ export type Autor = {
   tipos: Record<string, Brief>;
   destinos: Ranked[];
   funcoes: Ranked[];
+  favorecidos?: FavorecidoRef[];
 };
 export type Destino = {
   ibge: string;
@@ -44,6 +45,7 @@ export type Destino = {
   por_ano: Record<string, Brief>;
   autores: Ranked[];
   funcoes: Ranked[];
+  favorecidos?: FavorecidoRef[];
 };
 export type Funcao = {
   nome: string;
@@ -52,6 +54,22 @@ export type Funcao = {
   autores: Ranked[];
   destinos: Ranked[];
 };
+export type Favorecido = {
+  codigo: string;
+  slug: string;
+  nome: string;
+  natureza_juridica: string | null;
+  tipo: string | null;
+  uf: string | null;
+  municipio: string | null;
+  total: number;
+  por_ano: Record<string, number>;
+  n_autores: number;
+  n_emendas: number;
+};
+export type FavorecidoRef = { codigo: string; slug: string; nome: string; tipo: string | null; valor: number };
+export type Recebimento = { c: string; au: string; am: string; v: number; mn: string | null };
+export type Ipca = { source_url: string; fetched_at: string; base_month: string; variable: string; method: string; factors: Record<string, number>; factors_dec: Record<string, number> };
 export type RosterPerson = { nome: string; nome_parlamentar: string | null; partido: string | null; casa: string | null; legislaturas: number[] };
 export type Source = { name: string; url: string; accessed_at?: string; checksum?: string; size_bytes?: number; rows?: number; via?: string; member?: string };
 /** Linha de emenda, compacta: ano, número, tipo, autor, destino, função, ação e valores. */
@@ -86,6 +104,10 @@ type Core = {
   roster_sem_emendas: RosterPerson[];
   destinos: Destino[];
   funcoes: Funcao[];
+  favorecidos: Favorecido[];
+  favorecidos_por_tipo: Record<string, { n_favorecidos: number; n_recebimentos: number; valor: number }>;
+  favorecidos_por_natureza: Record<string, { n_favorecidos: number; n_recebimentos: number; valor: number }>;
+  ipca: Ipca;
   sources: Source[];
   stats: Record<string, unknown>;
 };
@@ -167,6 +189,23 @@ export function getFuncoes(): Funcao[] {
 export function getFuncao(nome: string): Funcao | undefined {
   return DATA.funcoes.find((funcao) => funcao.nome === nome);
 }
+export function getFavorecidos(): Favorecido[] {
+  return DATA.favorecidos ?? [];
+}
+export function getFavorecido(slug: string): Favorecido | undefined {
+  return DATA.favorecidos?.find((item) => item.slug === slug);
+}
+export function getFavorecidosPorTipo() {
+  return DATA.favorecidos_por_tipo ?? {};
+}
+export function getFavorecidosPorNatureza() {
+  return DATA.favorecidos_por_natureza ?? {};
+}
+export function getIpca(): Ipca {
+  return DATA.ipca;
+}
+/** Banco do Brasil aparece como favorecido dos repasses fundo a fundo do SUS; não é destinatário final. */
+export const BB_CODIGO = "00000000000191";
 export function getSources(): Source[] {
   return DATA.sources;
 }
@@ -266,6 +305,24 @@ export async function loadLinhasDestino(ibge: string): Promise<Linha[]> {
     return lines;
   } catch {
     linhasDestino.set(ibge, []);
+    return [];
+  }
+}
+
+const recebimentosCache = new Map<string, Recebimento[]>();
+
+export async function loadRecebimentos(slug: string): Promise<Recebimento[]> {
+  const cached = recebimentosCache.get(slug);
+  if (cached) {
+    return cached;
+  }
+  try {
+    const module = (await import(`@/lib/static-favorecidos/${slug}.generated.json`)) as { default?: Recebimento[] };
+    const rows = (module.default ?? module) as Recebimento[];
+    recebimentosCache.set(slug, rows);
+    return rows;
+  } catch {
+    recebimentosCache.set(slug, []);
     return [];
   }
 }

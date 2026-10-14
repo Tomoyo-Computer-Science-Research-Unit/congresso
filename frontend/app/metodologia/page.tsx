@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Panel, Screen } from "@/components/ui";
-import { CASA_LABELS, formatInt, getMeta, getRosterSemEmendas, getSources, getStats, niceName } from "@/lib/static-api";
+import { CASA_LABELS, formatBRL, formatInt, getFavorecidos, getIpca, getMeta, getRosterSemEmendas, getSources, getStats, getTotals, niceName } from "@/lib/static-api";
 
 function sourceLabel(name: string): string {
   const camara = name.match(/^camara deputados RJ leg (\d+)$/);
@@ -26,6 +26,11 @@ export default function MethodPage() {
   const roster = getRosterSemEmendas();
   const stats = getStats() as { rows_total?: number; rows_kept?: number };
   const zip = sources[0];
+  const ipca = getIpca();
+  const ipcaBase = `${ipca.base_month.slice(5, 7)}/${ipca.base_month.slice(0, 4)}`;
+  const favStats = ((getStats() as { favorecidos?: { rows_matched?: number; favorecidos?: number; total_recebido?: number } }).favorecidos ?? {}) as { rows_matched?: number; favorecidos?: number; total_recebido?: number };
+  const favTotal = formatBRL(favStats.total_recebido ?? getFavorecidos().reduce((sum, item) => sum + item.total, 0));
+  const pagoTotal = formatBRL(getTotals().pago_total);
   const accessed = zip?.accessed_at ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "America/Sao_Paulo" }).format(new Date(zip.accessed_at)) : "–";
 
   return (
@@ -46,6 +51,24 @@ export default function MethodPage() {
               Os valores são a execução da emenda no seu ano orçamentário, em reais nominais, sem correção pela inflação. <em>Empenhado</em> é o que o governo
               reservou para a emenda. <em>Pago</em>, aqui, soma o pago no próprio ano com os restos a pagar pagos em anos seguintes: é o que de fato saiu do
               Tesouro até a data do arquivo. Por isso o ano corrente tem pouco pago, e anos antigos mostram pagamentos que só ocorreram depois.
+            </p>
+          </section>
+          <section>
+            <h3 className="serif text-[15px] text-ink">Reais de hoje</h3>
+            <p>
+              Por padrão os valores aparecem corrigidos pelo IPCA para {ipcaBase}, no modelo do gwern.net: o número grande é o corrigido, e o nominal com o ano
+              fica em corpo menor ao lado. O fator de cada ano é o índice de {ipcaBase} dividido pela média mensal do índice naquele ano, porque a execução se
+              espalha pelo ano. Somas de vários anos corrigem ano a ano antes de somar. A tecla N mostra tudo em reais nominais. Série: IBGE, SIDRA 1737.
+            </p>
+          </section>
+          <section>
+            <h3 className="serif text-[15px] text-ink">Favorecidos</h3>
+            <p>
+              O arquivo “por favorecido” do mesmo download diz a quem cada ordem bancária foi paga: {formatInt(favStats.rows_matched)} pagamentos a{" "}
+              {formatInt(favStats.favorecidos)} CNPJs e CPFs (estes já vêm mascarados pelo Portal), somando {favTotal} contra {pagoTotal} de pago mais restos a pagar
+              no arquivo principal; a diferença são devoluções, retenções e emendas pagas sem linha de favorecido. O maior “favorecido” é o Banco do Brasil, com
+              36% do total: nos repasses fundo a fundo do SUS a ordem bancária sai em nome do banco, e o fundo municipal que recebeu não aparece nessas linhas. A
+              partir de 2025 os fundos municipais passam a constar diretamente.
             </p>
           </section>
           <section>

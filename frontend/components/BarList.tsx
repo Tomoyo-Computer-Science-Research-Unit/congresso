@@ -4,7 +4,9 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui";
 import { formatBRL } from "@/lib/static-api";
 
-export type BarRow = { key: string; label: string; sub?: string; value: number; href?: string; selected?: boolean; onClick?: () => void };
+import type { ReactNode } from "react";
+
+export type BarRow = { key: string; label: string; sub?: string; value: number; valueNode?: ReactNode; href?: string; selected?: boolean; onClick?: () => void };
 
 /** Lista ordenada com uma barra proporcional sob cada rótulo; valor em R$ à direita. */
 export function BarList({ rows, max, empty = "SEM EMENDAS" }: { rows: BarRow[]; max?: number; empty?: string }) {
@@ -23,7 +25,7 @@ export function BarList({ rows, max, empty = "SEM EMENDAS" }: { rows: BarRow[]; 
               {row.sub ? <span className="barlist__sub truncate">{row.sub}</span> : null}
               <span className="barlist__bar" style={{ width: `${Math.max(1, (row.value / top) * 100)}%` }} aria-hidden="true" />
             </span>
-            <span className="barlist__value num">{formatBRL(row.value)}</span>
+            <span className="barlist__value num">{row.valueNode ?? formatBRL(row.value)}</span>
           </>
         );
         const className = `barlist__row ${row.selected ? "is-selected" : ""}`;

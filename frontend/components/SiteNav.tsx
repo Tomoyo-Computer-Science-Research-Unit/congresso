@@ -8,12 +8,16 @@ export const NAV_ITEMS = [
   { href: "/autores", label: "Autores", key: "2" },
   { href: "/destinos", label: "Destinos", key: "3" },
   { href: "/funcoes", label: "Funções", key: "4" },
-  { href: "/metodologia", label: "Método", key: "5" }
+  { href: "/favorecidos", label: "Favorecidos", key: "5" },
+  { href: "/metodologia", label: "Método", key: "6" }
 ];
 
 export function isActivePath(pathname: string, href: string) {
   if (href === "/") {
     return pathname === "/";
+  }
+  if (href === "/metodologia") {
+    return pathname.startsWith("/metodologia") || pathname.startsWith("/status");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

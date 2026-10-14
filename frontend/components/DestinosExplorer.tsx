@@ -7,7 +7,9 @@ import { useScreenHotkeys } from "@/components/Hotkeys";
 import { Panel, Screen, Segmented, Stat } from "@/components/ui";
 import { YearBars } from "@/components/YearBars";
 import { YearSelect, stepYear, type YearSel } from "@/components/YearSelect";
+import { GroupMoney, adjust, useMoneyMode, valueIn } from "@/lib/money";
 import {
+  BB_CODIGO,
   CASA_LABELS,
   METRICS,
   formatBRL,
@@ -16,7 +18,6 @@ import {
   getYears,
   loadGeo,
   niceName,
-  valueFor,
   yearPoints,
   type Destino,
   type GeoFeatureCollection,
@@ -71,6 +72,7 @@ function coordinates(geometry: Geometry): number[][] {
 export function DestinosExplorer() {
   const years = getYears();
   const all = getDestinos();
+  const { mode: money, real } = useMoneyMode();
   const [metric, setMetric] = useState<Metric>("empenhado");
   const [mode, setMode] = useState<Mode>("total");
   const [year, setYear] = useState<YearSel>("all");
@@ -94,10 +96,10 @@ export function DestinosExplorer() {
 
   const valueOf = useMemo(
     () => (destino: Destino) => {
-      const raw = valueFor(destino.por_ano, destino.totais, year, metric);
+      const raw = valueIn(money, destino.por_ano, destino.totais, year, metric);
       return mode === "per_capita" && destino.populacao_2022 ? raw / destino.populacao_2022 : raw;
     },
-    [metric, mode, year]
+    [metric, mode, money, year]
   );
   const list = useMemo(
     () =>
@@ -119,7 +121,11 @@ export function DestinosExplorer() {
     const lats = points.map(([, lat]) => lat);
     return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
   }, [geo]);
-  const points = useMemo(() => (selected ? yearPoints(selected.por_ano, years) : []), [selected, years]);
+  const nominalPoints = useMemo(() => (selected ? yearPoints(selected.por_ano, years) : []), [selected, years]);
+  const points = useMemo(
+    () => (real ? nominalPoints.map((point) => ({ ...point, empenhado: adjust(point.empenhado, point.year), pago_total: adjust(point.pago_total, point.year) })) : nominalPoints),
+    [nominalPoints, real]
+  );
 
   const hotkeys = useMemo(
     () => ({
@@ -218,6 +224,7 @@ export function DestinosExplorer() {
             label: destino.nome,
             sub: destino.populacao_2022 ? `${formatInt(destino.populacao_2022)} hab.` : undefined,
             value,
+            valueNode: mode === "per_capita" ? undefined : <GroupMoney porAno={destino.por_ano} totais={destino.totais} year={year} metric={metric} />,
             selected: destino.ibge === selected?.ibge,
             onClick: () => setSelectedIbge(destino.ibge)
           }))}
@@ -226,23 +233,36 @@ export function DestinosExplorer() {
 
       {selected ? (
         <Panel title={<b>{selected.nome}</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">{selectedValue ? `${selectedValue.position + 1}º de ${list.length}` : ""}</span>} style={{ gridColumn: 1, gridRow: 2 }}>
-          <div className="grid grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)] gap-6">
+          <div className="grid grid-cols-[240px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-6">
             <div>
-              <Stat label="Empenhado" value={formatBRL(valueFor(selected.por_ano, selected.totais, year, "empenhado"))} />
-              <Stat label="Pago, incl. restos a pagar" value={formatBRL(valueFor(selected.por_ano, selected.totais, year, "pago_total"))} />
-              <Stat label="Por habitante (2022)" value={selected.populacao_2022 ? `${formatBRL(valueFor(selected.por_ano, selected.totais, year, metric) / selected.populacao_2022, 0)}` : "–"} />
+              <Stat label="Empenhado" value={<GroupMoney porAno={selected.por_ano} totais={selected.totais} year={year} metric="empenhado" />} />
+              <Stat label="Pago, incl. restos a pagar" value={<GroupMoney porAno={selected.por_ano} totais={selected.totais} year={year} metric="pago_total" />} />
+              <Stat label="Por habitante (2022)" value={selected.populacao_2022 ? `${formatBRL(valueIn(money, selected.por_ano, selected.totais, year, metric) / selected.populacao_2022, 0)}` : "–"} />
               <Stat label="População 2022" value={formatInt(selected.populacao_2022)} />
             </div>
-            <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={150} />
+            <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={150} nominal={real ? Object.fromEntries(nominalPoints.map((point) => [point.year, point])) : undefined} />
             <div className="-my-1 overflow-auto">
               <BarList
                 rows={selected.autores.slice(0, 6).map((row) => ({
                   key: row.id,
                   label: niceName(row.nome ?? row.id),
                   sub: [row.partido, CASA_LABELS[row.casa ?? ""] ?? row.casa].filter(Boolean).join(" · "),
-                  value: row[metric],
+                  value: valueIn(money, row.por_ano ?? {}, row, "all", metric),
+                  valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year="all" metric={metric} />,
                   href: `/autores?autor=${encodeURIComponent(row.id)}`
                 }))}
+              />
+            </div>
+            <div className="-my-1 overflow-auto">
+              <BarList
+                rows={(selected.favorecidos ?? []).slice(0, 6).map((row) => ({
+                  key: row.codigo,
+                  label: niceName(row.nome),
+                  sub: row.codigo === BB_CODIGO ? "repasse fundo a fundo via BB" : "recebido, nominal",
+                  value: row.valor,
+                  href: `/favorecidos?f=${encodeURIComponent(row.slug)}`
+                }))}
+                empty="SEM FAVORECIDO SEDIADO AQUI"
               />
             </div>
           </div>

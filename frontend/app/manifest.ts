@@ -4,8 +4,8 @@ export const dynamic = "force-static";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Emendas RJ",
-    short_name: "Emendas RJ",
+    name: "Emendas",
+    short_name: "Emendas",
     description: "Emendas parlamentares da bancada federal do Rio de Janeiro, a partir do Portal da Transparência.",
     start_url: "/",
     display: "standalone",

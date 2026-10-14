@@ -11,6 +11,11 @@ type Props = {
   selectedYear?: number | "all";
   onSelectYear?: (year: number) => void;
   height?: number;
+  /** Só uma série (ex.: recebido por ano), sem a barra apagada da outra métrica. */
+  single?: boolean;
+  labels?: { empenhado?: string; pago_total?: string };
+  /** Nominal de cada ano, para o tooltip no modo real. */
+  nominal?: Record<number, { empenhado: number; pago_total: number }>;
 };
 
 /** Eixo curto para o Y: 1,2 bi · 240 mi · 80 mil. */
@@ -19,8 +24,9 @@ function shortBRL(value: number): string {
 }
 
 /** Barras por ano orçamentário: a métrica ativa em tinta, a outra atrás, apagada. */
-export function YearBars({ points, metric, selectedYear = "all", onSelectYear, height }: Props) {
+export function YearBars({ points, metric, selectedYear = "all", onSelectYear, height, single = false, labels, nominal }: Props) {
   const other: Metric = metric === "empenhado" ? "pago_total" : "empenhado";
+  const label = { empenhado: labels?.empenhado ?? "Empenhado", pago_total: labels?.pago_total ?? "Pago" };
   if (!points.some((point) => point.empenhado > 0 || point.pago_total > 0)) {
     return (
       <div className="chart-fill grid place-items-center text-[11px] tracking-[0.18em] text-ash" style={{ height }}>
@@ -45,14 +51,15 @@ export function YearBars({ points, metric, selectedYear = "all", onSelectYear, h
               return (
                 <div className="chart-tooltip">
                   <strong>{point.year}</strong>
-                  <div className="row">
-                    <span>Empenhado</span>
-                    <span>{formatBRL(point.empenhado)}</span>
-                  </div>
-                  <div className="row">
-                    <span>Pago</span>
-                    <span>{formatBRL(point.pago_total)}</span>
-                  </div>
+                  {(single ? [metric] : (["empenhado", "pago_total"] as Metric[])).map((key) => (
+                    <div className="row" key={key}>
+                      <span>{label[key]}</span>
+                      <span>
+                        {formatBRL(point[key])}
+                        {nominal?.[point.year] && Math.abs(nominal[point.year][key] - point[key]) > 1 ? <span className="ml-1 text-ash">({formatBRL(nominal[point.year][key])} nominal)</span> : null}
+                      </span>
+                    </div>
+                  ))}
                   {point.n !== undefined ? (
                     <div className="row">
                       <span>Linhas</span>
@@ -63,11 +70,13 @@ export function YearBars({ points, metric, selectedYear = "all", onSelectYear, h
               );
             }}
           />
-          <Bar dataKey={other} isAnimationActive={false} maxBarSize={22} onClick={(data) => onSelectYear?.((data as unknown as YearPoint).year)}>
-            {points.map((point) => (
-              <Cell key={point.year} fill="var(--ink)" fillOpacity={0.18} className={onSelectYear ? "cursor-pointer" : undefined} />
-            ))}
-          </Bar>
+          {single ? null : (
+            <Bar dataKey={other} isAnimationActive={false} maxBarSize={22} onClick={(data) => onSelectYear?.((data as unknown as YearPoint).year)}>
+              {points.map((point) => (
+                <Cell key={point.year} fill="var(--ink)" fillOpacity={0.18} className={onSelectYear ? "cursor-pointer" : undefined} />
+              ))}
+            </Bar>
+          )}
           <Bar dataKey={metric} isAnimationActive={false} maxBarSize={22} onClick={(data) => onSelectYear?.((data as unknown as YearPoint).year)}>
             {points.map((point) => (
               <Cell
