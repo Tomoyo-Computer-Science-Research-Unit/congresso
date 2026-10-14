@@ -150,7 +150,7 @@ export function FavorecidosExplorer() {
           {list.map(({ item, value }) => (
             <li key={item.slug} role="presentation">
               <button type="button" role="option" aria-selected={item.slug === selected.slug} onClick={() => setSelectedSlug(item.slug)}>
-                <span className="truncate">
+                <span className="whitespace-normal break-words">
                   {niceName(item.nome)}
                   <span className="faint ml-1.5 text-[10px] tracking-[0.08em]">{item.municipio ? niceName(item.municipio) : item.uf}</span>
                 </span>
@@ -232,7 +232,7 @@ export function FavorecidosExplorer() {
                   <tr key={`${row.c}-${row.am}-${position}`}>
                     <td className="num">{`${row.am.slice(5, 7)}/${row.am.slice(0, 4)}`}</td>
                     <td className="num faint">{row.c}</td>
-                    <td className="max-w-[220px] truncate">
+                    <td className="max-w-[220px] whitespace-normal break-words">
                       <Link href={`/autores?autor=${encodeURIComponent(row.au)}`} className="text-ink hover:underline hover:underline-offset-4">
                         {autor ? displayName(autor) : row.au}
                       </Link>

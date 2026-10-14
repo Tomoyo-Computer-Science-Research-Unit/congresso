@@ -36,7 +36,7 @@ export default function MethodPage() {
   return (
     <Screen columns="minmax(0, 1fr) 440px" rows="minmax(0, 1fr) minmax(0, 1fr)">
       <Panel title={<b>Método</b>} fill style={{ gridRow: "1 / span 2" }}>
-        <div className="max-w-[72ch] space-y-5 text-[12.5px] leading-6 text-sumi">
+        <div className="prose-fx max-w-[72ch] space-y-5 text-[12.5px] leading-6 text-sumi">
           <section>
             <h3 className="serif text-[15px] text-ink">Fonte</h3>
             <p>
@@ -117,7 +117,7 @@ export default function MethodPage() {
           <tbody>
             {sources.map((source) => (
               <tr key={source.name}>
-                <td className="max-w-[220px] truncate">
+                <td className="max-w-[220px] whitespace-normal break-words">
                   <a href={source.url} target="_blank" rel="noreferrer" className="text-ink underline decoration-fog underline-offset-4 hover:decoration-ink" title={source.url}>
                     {sourceLabel(source.name)}
                   </a>

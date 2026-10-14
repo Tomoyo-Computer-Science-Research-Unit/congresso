@@ -89,7 +89,7 @@ export function EmptyState({ children }: { children: ReactNode }) {
 /** Linha "rótulo … valor" para painéis de detalhe. */
 export function Stat({ label, value, sub }: { label: ReactNode; value: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-t border-line py-1.5 text-[11.5px]">
+    <div className="stat flex items-baseline justify-between gap-3 border-t border-line py-1.5 text-[11.5px]">
       <span className="text-ash">{label}</span>
       <span className="num text-right text-ink">
         {value}

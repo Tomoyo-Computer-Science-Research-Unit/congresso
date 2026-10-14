@@ -62,7 +62,7 @@ export function FuncoesExplorer() {
           {list.map(({ funcao }) => (
             <li key={funcao.nome} role="presentation">
               <button type="button" role="option" aria-selected={funcao.nome === selected.nome} onClick={() => setSelectedName(funcao.nome)}>
-                <span className="truncate">{funcao.nome}</span>
+                <span className="whitespace-normal break-words">{funcao.nome}</span>
                 <span className="num">
                   <GroupMoney porAno={funcao.por_ano} totais={funcao.totais} year="all" metric={metric} />
                 </span>

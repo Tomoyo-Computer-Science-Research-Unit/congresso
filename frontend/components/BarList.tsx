@@ -21,8 +21,8 @@ export function BarList({ rows, max, empty = "SEM EMENDAS" }: { rows: BarRow[]; 
           <>
             <span className="barlist__rank num">{index + 1}</span>
             <span className="barlist__label">
-              <span className="truncate">{row.label}</span>
-              {row.sub ? <span className="barlist__sub truncate">{row.sub}</span> : null}
+              <span className="whitespace-normal break-words">{row.label}</span>
+              {row.sub ? <span className="barlist__sub whitespace-normal break-words">{row.sub}</span> : null}
               <span className="barlist__bar" style={{ width: `${Math.max(1, (row.value / top) * 100)}%` }} aria-hidden="true" />
             </span>
             <span className="barlist__value num">{row.valueNode ?? formatBRL(row.value)}</span>

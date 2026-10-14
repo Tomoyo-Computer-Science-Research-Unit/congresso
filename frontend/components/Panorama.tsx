@@ -108,7 +108,7 @@ export function Panorama() {
   useScreenHotkeys(hotkeys);
 
   return (
-    <Screen columns="minmax(0, 1fr) minmax(0, 1fr) 360px" rows="auto minmax(0, 1fr) minmax(0, 1fr)">
+    <Screen columns="minmax(0, 1fr) minmax(0, 1fr) 360px" rows="auto minmax(0, 1fr)">
       <Panel
         title={
           <span>
@@ -122,30 +122,56 @@ export function Panorama() {
           </>
         }
         style={{ gridColumn: "1 / span 2" }}
+        foot={
+          <span>
+            {Object.entries(tipos)
+              .sort((a, b) => b[1][metric] - a[1][metric])
+              .map(([code, value], index) => (
+                <span key={code}>
+                  {index ? " · " : ""}
+                  {TIPO_LABELS[code] ?? code} <GroupMoney porAno={tipoAnos[code] ?? {}} totais={value} year={year} metric={metric} />
+                </span>
+              ))}
+          </span>
+        }
       >
-        <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-6">
+        <div className="grid grid-cols-[280px_minmax(0,1fr)] gap-6">
           <div>
             <Stat label="Empenhado" value={<GroupMoney porAno={porAno} totais={totals} year={year} metric="empenhado" />} />
             <Stat label="Pago, incl. restos a pagar" value={<GroupMoney porAno={porAno} totais={totals} year={year} metric="pago_total" />} />
             <Stat label="Linhas de emenda" value={formatInt(totals.n)} />
             <Stat label="Autores com emenda" value={formatInt(autoresComEmenda)} />
           </div>
-          <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={160} nominal={real ? nominalByYear : undefined} />
+          <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={150} nominal={real ? nominalByYear : undefined} />
         </div>
       </Panel>
 
-      <Panel title={<b>Autores</b>} flush fill style={{ gridColumn: "3", gridRow: "1 / span 3" }}>
-        <BarList
-          rows={autores.map(({ autor, value }) => ({
-            key: autor.id,
-            label: displayName(autor),
-            sub: [autor.partido, CASA_LABELS[autor.casa ?? ""] ?? autor.casa].filter(Boolean).join(" · "),
-            value,
-            valueNode: <GroupMoney porAno={autor.por_ano} totais={autor.totais} year={year} metric={metric} />,
-            href: `/autores?autor=${encodeURIComponent(autor.id)}`
-          }))}
-        />
-      </Panel>
+      <div className="grid min-h-0 grid-rows-2 gap-2" style={{ gridColumn: "3", gridRow: "1 / span 2" }}>
+        <Panel title={<b>Autores</b>} flush fill>
+          <BarList
+            rows={autores.map(({ autor, value }) => ({
+              key: autor.id,
+              label: displayName(autor),
+              sub: [autor.partido, CASA_LABELS[autor.casa ?? ""] ?? autor.casa].filter(Boolean).join(" · "),
+              value,
+              valueNode: <GroupMoney porAno={autor.por_ano} totais={autor.totais} year={year} metric={metric} />,
+              href: `/autores?autor=${encodeURIComponent(autor.id)}`
+            }))}
+          />
+        </Panel>
+        <Panel title={<b>Favorecidos</b>} flush fill foot="Por ano de pagamento. Banco do Brasil é o caixa dos repasses fundo a fundo do SUS, não o destinatário final.">
+          <BarList
+            rows={favorecidos.map(({ favorecido, value, nominal }) => ({
+              key: favorecido.codigo,
+              label: niceName(favorecido.nome),
+              sub: favorecido.codigo === BB_CODIGO ? "repasse fundo a fundo via BB" : [favorecido.natureza_juridica, favorecido.municipio ? niceName(favorecido.municipio) : null].filter(Boolean).join(" · "),
+              value,
+              valueNode: <MoneySum real={value} nominal={nominal} />,
+              href: `/favorecidos?f=${encodeURIComponent(favorecido.slug)}`
+            }))}
+          />
+        </Panel>
+      </div>
 
       <Panel title={<b>Funções</b>} flush fill>
         <BarList
@@ -178,31 +204,6 @@ export function Panorama() {
             valueNode: <GroupMoney porAno={destino.por_ano} totais={destino.totais} year={year} metric={metric} />,
             href: `/destinos?m=${destino.ibge}`
           }))}
-        />
-      </Panel>
-
-      <Panel title={<b>Favorecidos</b>} flush fill style={{ gridColumn: "1" }} foot="Recebido por ano de pagamento. Banco do Brasil é o caixa dos repasses fundo a fundo do SUS, não o destinatário final.">
-        <BarList
-          rows={favorecidos.map(({ favorecido, value, nominal }) => ({
-            key: favorecido.codigo,
-            label: niceName(favorecido.nome),
-            sub: favorecido.codigo === BB_CODIGO ? "repasse fundo a fundo via BB" : [favorecido.natureza_juridica, favorecido.municipio ? niceName(favorecido.municipio) : null].filter(Boolean).join(" · "),
-            value,
-            valueNode: <MoneySum real={value} nominal={nominal} />,
-            href: `/favorecidos?f=${encodeURIComponent(favorecido.slug)}`
-          }))}
-        />
-      </Panel>
-      <Panel title={<b>Tipos de emenda</b>} flush fill style={{ gridColumn: "2" }}>
-        <BarList
-          rows={Object.entries(tipos)
-            .sort((a, b) => b[1][metric] - a[1][metric])
-            .map(([code, value]) => ({
-              key: code,
-              label: TIPO_LABELS[code] ?? code,
-              value: valueIn(mode, tipoAnos[code] ?? {}, value, year, metric),
-              valueNode: <GroupMoney porAno={tipoAnos[code] ?? {}} totais={value} year={year} metric={metric} />
-            }))}
         />
       </Panel>
     </Screen>

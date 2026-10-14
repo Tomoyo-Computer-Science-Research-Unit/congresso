@@ -38,6 +38,8 @@ export function AutoresExplorer() {
   const all = getAutores();
   const { mode, real } = useMoneyMode();
   const [casa, setCasa] = useState<Casa>("all");
+  const [partido, setPartido] = useState<string>("all");
+  const partidos = useMemo(() => [...new Set(all.map((autor) => autor.partido).filter((item): item is string => Boolean(item)))].sort((a, b) => a.localeCompare(b, "pt-BR")), [all]);
   const [metric, setMetric] = useState<Metric>("empenhado");
   const [year, setYear] = useState<YearSel>("all");
   const [selectedId, setSelectedId] = useState<string>(all[0]?.id ?? "");
@@ -66,10 +68,11 @@ export function AutoresExplorer() {
     () =>
       all
         .filter((autor) => casa === "all" || autor.casa === casa || autor.casas.includes(casa))
+        .filter((autor) => partido === "all" || autor.partido === partido)
         .map((autor) => ({ autor, value: valueIn(mode, autor.por_ano, autor.totais, year, metric) }))
         .filter((row) => row.value > 0 || row.autor.id === selectedId)
         .sort((a, b) => b.value - a.value),
-    [all, casa, metric, mode, selectedId, year]
+    [all, casa, metric, mode, partido, selectedId, year]
   );
   const selected = all.find((autor) => autor.id === selectedId) ?? all[0];
   const index = Math.max(0, list.findIndex((row) => row.autor.id === selected?.id));
@@ -118,7 +121,7 @@ export function AutoresExplorer() {
   const semEmendas = getRosterSemEmendas();
 
   return (
-    <Screen columns="320px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)" rows="auto minmax(0, 1fr) minmax(0, 1.2fr)">
+    <Screen columns="320px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)" rows="auto minmax(0, 1fr) minmax(0, 1.4fr)">
       <Panel
         title={<b>Autores</b>}
         aside={<Segmented label="Casa" value={casa} options={CASAS} onChange={setCasa} />}
@@ -127,11 +130,21 @@ export function AutoresExplorer() {
         style={{ gridRow: "1 / span 3" }}
         foot={`${list.length} com emenda no recorte; ${semEmendas.length} da bancada sem emenda executada no período.`}
       >
+        <div className="flex items-center gap-2 border-b border-line p-2">
+          <select className="yearselect" aria-label="Partido" value={partido} onChange={(event) => setPartido(event.target.value)}>
+            <option value="all">Todos os partidos</option>
+            {partidos.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
         <ul className="menu" role="listbox" aria-label="Autores">
           {list.map(({ autor, value }) => (
             <li key={autor.id} role="presentation">
               <button type="button" role="option" aria-selected={autor.id === selected.id} onClick={() => setSelectedId(autor.id)}>
-                <span className="truncate">
+                <span className="whitespace-normal break-words">
                   {displayName(autor)}
                   <span className="faint ml-1.5 text-[10px] tracking-[0.08em]">{autor.partido}</span>
                 </span>
@@ -154,7 +167,7 @@ export function AutoresExplorer() {
             <span>
               <b className="serif text-[16px]">{displayName(selected)}</b>
               <span className="mt-0.5 block text-[10.5px] tracking-[0.12em] text-ash">
-                {[titleCase(selected.nome ?? ""), selected.partido, selected.casas.map((item) => CASA_LABELS[item] ?? item).join(" e "), selected.legislaturas.length ? `legislaturas ${selected.legislaturas.join(", ")}` : null]
+                {[titleCase(selected.nome ?? ""), selected.partido, selected.casas.map((item) => CASA_LABELS[item] ?? item).join(" e "), selected.legislaturas.length ? `legislaturas ${selected.legislaturas.join(", ")}` : null, selected.codigos_siafi.length ? `SIAFI ${selected.codigos_siafi.join(", ")}` : null]
                   .filter(Boolean)
                   .join(" · ")}
               </span>
@@ -177,9 +190,8 @@ export function AutoresExplorer() {
             {year === "all"
               ? Object.entries(selected.tipos).map(([code, value]) => <Stat key={code} label={TIPO_SHORT[code] ?? code} value={<MoneySum real={value[metric]} nominal={value[metric]} />} />)
               : null}
-            <Stat label="Códigos SIAFI" value={selected.codigos_siafi.join(", ") || "–"} />
           </div>
-          <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={170} nominal={real ? Object.fromEntries(nominalPoints.map((point) => [point.year, point])) : undefined} />
+          <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={150} nominal={real ? Object.fromEntries(nominalPoints.map((point) => [point.year, point])) : undefined} />
         </div>
       </Panel>
 
@@ -241,13 +253,13 @@ export function AutoresExplorer() {
                   <td className="num">{linha.a}</td>
                   <td className="num faint">{linha.n}</td>
                   <td className="faint">{linha.t}</td>
-                  <td className="max-w-[150px] truncate" title={linha.mn ?? undefined}>
+                  <td className="max-w-[150px] whitespace-normal break-words" title={linha.mn ?? undefined}>
                     {linha.mn ? `${linha.mn}${linha.uf && linha.uf !== "RJ" ? ` (${linha.uf})` : ""}` : LOCALIDADE_LABELS[linha.loc] ?? linha.loc}
                   </td>
-                  <td className="max-w-[120px] truncate" title={linha.sf}>
+                  <td className="max-w-[120px] whitespace-normal break-words" title={linha.sf}>
                     {linha.f}
                   </td>
-                  <td className="max-w-[220px] truncate text-ash" title={linha.ac}>
+                  <td className="max-w-[380px] whitespace-normal break-words text-ash" title={linha.ac}>
                     {titleCase(linha.ac)}
                   </td>
                   <td className="num right">
