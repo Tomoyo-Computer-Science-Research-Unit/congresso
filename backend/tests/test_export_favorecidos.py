@@ -29,4 +29,35 @@ def test_favorecidos_section_tops_and_files():
     assert list(out["destinos"]) == ["3303302"] and out["destinos"]["3303302"][0]["valor"] == 300.0  # SP favorecido excluded
     assert set(out["arquivos"]) == {"1", "xxx1xx"}
     assert out["arquivos"]["1"][0] == {"c": "e1", "au": "a", "am": "2024-01", "v": 200.0, "mn": "Niterói"}
-    assert out["stats"]["municipios_rj_sem_ibge"] == {}
+    assert out["stats"]["municipios_uf_sem_ibge"] == {}
+
+
+def test_municipio_key_sp_aliases():
+    from app.config import uf_config
+
+    aliases = uf_config("SP").municipio_aliases
+    assert municipio_key("EMBU", aliases) == municipio_key("Embu das Artes", aliases)
+    assert municipio_key("SÃO LUÍS DO PARAITINGA", aliases) == municipio_key("São Luiz do Paraitinga", aliases)
+    assert municipio_key("SANTA BARBARA D'OESTE", aliases) == municipio_key("Santa Bárbara d'Oeste", aliases)
+
+
+def test_favorecidos_section_sp_limits_split_core_and_extra():
+    from app.etl.export_static_frontend import Limits
+
+    snapshot = {
+        "favorecidos": [
+            {"codigo": str(i), "nome": f"F{i}", "natureza_juridica": "Município", "tipo": "Pessoa Jurídica", "uf": "SP",
+             "municipio": "SANTOS", "total_recebido": 100.0 - i, "por_ano": {"2024": 100.0 - i}, "por_autor": {"a": 100.0 - i}, "n_emendas": 1}
+            for i in range(4)
+        ],
+        "recebimentos": [
+            {"codigo_emenda": f"e{i}", "autor_id": "a", "ano_mes": "2024-01", "favorecido_codigo": str(i), "valor": 100.0 - i}
+            for i in range(4)
+        ],
+    }
+    out = favorecidos_section(snapshot, {"3548500": "Santos"}, {}, "SP",
+                              Limits(top_favorecidos=1, favorecidos_por_lista=3, detalhe_min=None, nucleo_so_top=True))
+    assert [f["codigo"] for f in out["top"]] == ["0"]
+    assert [f["codigo"] for f in out["extra"]] == ["1", "2"]  # reachable from lists, outside the core
+    assert set(out["arquivos"]) == {"0", "1", "2"}
+    assert list(out["destinos"]) == ["3548500"]

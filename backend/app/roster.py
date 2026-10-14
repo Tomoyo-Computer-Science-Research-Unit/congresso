@@ -1,6 +1,6 @@
-"""Roster of the 'bancada fluminense': RJ federal deputies and senators per legislature.
+"""Roster of one state's federal bancada: deputies and senators per legislature (RJ, SP...).
 
-Sources: Camara dadosabertos v2 (/deputados?siglaUf=RJ&idLegislatura=N, /deputados/{id}) and
+Sources: Camara dadosabertos v2 (/deputados?idLegislatura=N filtered by siglaUf, /deputados/{id}) and
 Senado dadosabertos (/senador/lista/legislatura/N). Also builds a NATIONAL name index (all
 deputies and senators, every legislature) so homonyms from other states can be detected.
 """
@@ -114,12 +114,12 @@ def _senado_list(legislatura: int, raw_dir: Path) -> list[dict[str, Any]]:
     return _as_list(data["ListaParlamentarLegislatura"]["Parlamentares"]["Parlamentar"])
 
 
-def _senado_mandatos_rj(p: dict[str, Any], legislatura: int) -> list[Mandato]:
-    """Mandates in `legislatura` for UF=RJ where the person actually exercised (has Exercicios)."""
+def _senado_mandatos_uf(p: dict[str, Any], legislatura: int, uf: str) -> list[Mandato]:
+    """Mandates in `legislatura` for `uf` where the person actually exercised (has Exercicios)."""
     out: list[Mandato] = []
     partido = p["IdentificacaoParlamentar"].get("SiglaPartidoParlamentar")
     for m in _as_list(p.get("Mandatos", {}).get("Mandato")):
-        if m.get("UfParlamentar") != config.UF:
+        if m.get("UfParlamentar") != uf:
             continue
         legs = {int(m["PrimeiraLegislaturaDoMandato"]["NumeroLegislatura"])}
         if m.get("SegundaLegislaturaDoMandato"):
@@ -172,7 +172,9 @@ def _merge_people(people: Iterable[Pessoa]) -> list[Pessoa]:
     return out
 
 
-def build_roster(raw_dir: Path = config.RAW_DIR, legislaturas: Iterable[int] = config.LEGISLATURAS) -> Roster:
+def build_roster(uf: str = config.DEFAULT_UF, raw_dir: Path = config.RAW_DIR,
+                 legislaturas: Iterable[int] = config.LEGISLATURAS) -> Roster:
+    uf = uf.upper()
     legislaturas = list(legislaturas)
     sources: list[dict[str, Any]] = []
     national: dict[str, set[str]] = {}
@@ -182,13 +184,13 @@ def build_roster(raw_dir: Path = config.RAW_DIR, legislaturas: Iterable[int] = c
     for leg in legislaturas:
         leg_ini, leg_fim = config.LEGISLATURAS[leg]
         # One national listing per legislature: feeds the homonym index and, filtered by siglaUf,
-        # the RJ roster. (The UF-filtered endpoint 504s on page 2, see FINDINGS.md.)
+        # the state's roster. (The UF-filtered endpoint 504s on page 2, see FINDINGS.md.)
         todos = _camara_list(leg, None, raw_dir)
         for d in todos:
             national.setdefault(normalize(d["nome"]), set()).add(f"camara:{d['id']}")
-        rj = [d for d in todos if d.get("siglaUf") == config.UF]
-        sources.append({"name": f"camara deputados RJ leg {leg}", "url": f"{config.CAMARA_API}/deputados?siglaUf=RJ&idLegislatura={leg}", "rows": len(rj)})
-        for d in rj:
+        da_uf = [d for d in todos if d.get("siglaUf") == uf]
+        sources.append({"name": f"camara deputados {uf} leg {leg}", "url": f"{config.CAMARA_API}/deputados?siglaUf={uf}&idLegislatura={leg}", "rows": len(da_uf)})
+        for d in da_uf:
             p = camara.get(d["id"])
             if p is None:
                 det = _camara_detail(d["id"], raw_dir)
@@ -209,7 +211,7 @@ def build_roster(raw_dir: Path = config.RAW_DIR, legislaturas: Iterable[int] = c
             for nm in (ident.get("NomeParlamentar"), ident.get("NomeCompletoParlamentar")):
                 if nm:
                     national.setdefault(normalize(nm), set()).add(f"senado:{code}")
-            mandatos = _senado_mandatos_rj(s, leg)
+            mandatos = _senado_mandatos_uf(s, leg, uf)
             if not mandatos:
                 continue
             p = senado.get(code)
@@ -225,6 +227,7 @@ def build_roster(raw_dir: Path = config.RAW_DIR, legislaturas: Iterable[int] = c
     return Roster(pessoas=pessoas, national_names=national, sources=sources)
 
 
-if __name__ == "__main__":  # quick manual run / warm the cache
-    r = build_roster()
+if __name__ == "__main__":  # quick manual run / warm the cache: python -m app.roster SP
+    import sys
+    r = build_roster(sys.argv[1] if len(sys.argv) > 1 else config.DEFAULT_UF)
     print(json.dumps({"pessoas": len(r.pessoas), "national_names": len(r.national_names)}))

@@ -2,7 +2,7 @@
 
 ``collect`` streams the zip member once, keeps only rows whose amendment code is in ``autor_by_codigo``
 and returns (favorecidos, recebimentos, stats). ``autor_by_codigo`` is built from the main file, so the
-author id is the snapshot's (roster id or 'bancada-rj'), never re-matched from this file's name column.
+author id is the snapshot's (roster id or 'bancada-<uf>'), never re-matched from this file's name column.
 """
 from __future__ import annotations
 
@@ -55,7 +55,8 @@ class FavorecidoAgg:
         }
 
 
-def collect(rows: Iterable[FavorecidoRow], autor_by_codigo: dict[str, str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+def collect(rows: Iterable[FavorecidoRow], autor_by_codigo: dict[str, str], bancada_codigo: str = "7120",
+            bancada_id: str = "bancada-rj") -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     aggs: dict[str, FavorecidoAgg] = {}
     recebimentos: list[dict[str, Any]] = []
     por_tipo: dict[str, float] = defaultdict(float)
@@ -79,7 +80,7 @@ def collect(rows: Iterable[FavorecidoRow], autor_by_codigo: dict[str, str]) -> t
         por_ano[str(r.ano)] += r.valor
         emendas_vistas.add(r.codigo_emenda)
         meses.add(r.ano_mes)
-        if r.autor_codigo and r.autor_codigo != "7120" and autor_id == "bancada-rj":
+        if r.autor_codigo and r.autor_codigo != bancada_codigo and autor_id == bancada_id:
             autor_divergente += 1
     favorecidos = sorted((a.json() for a in aggs.values()), key=lambda f: -f["total_recebido"])
     stats = {
@@ -98,5 +99,6 @@ def collect(rows: Iterable[FavorecidoRow], autor_by_codigo: dict[str, str]) -> t
     return favorecidos, recebimentos, stats
 
 
-def collect_from_zip(zip_path: Path, autor_by_codigo: dict[str, str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    return collect(iter_zip_member(zip_path, keep=set(autor_by_codigo)), autor_by_codigo)
+def collect_from_zip(zip_path: Path, autor_by_codigo: dict[str, str], bancada_codigo: str = "7120",
+                     bancada_id: str = "bancada-rj") -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    return collect(iter_zip_member(zip_path, keep=set(autor_by_codigo)), autor_by_codigo, bancada_codigo, bancada_id)

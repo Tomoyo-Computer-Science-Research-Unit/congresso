@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Panel, Screen } from "@/components/ui";
-import { CASA_LABELS, formatBRL, formatInt, getFavorecidos, getIpca, getMeta, getRosterSemEmendas, getSources, getStats, getTotals, niceName } from "@/lib/static-api";
+import { BB_CODIGO, CASA_LABELS, formatBRL, formatInt, getFavorecidos, getIpca, getMeta, getRosterSemEmendas, getSources, getStats, getTotals, niceName } from "@/lib/static-api";
+import { BANCADA_CURTA, UF } from "@/lib/uf";
 
 export const metadata: Metadata = { title: "Método" };
 
 function sourceLabel(name: string): string {
-  const camara = name.match(/^camara deputados RJ leg (\d+)$/);
+  const camara = name.match(/^camara deputados ([A-Z]{2}) leg (\d+)$/);
   if (camara) {
-    return `Câmara, deputados do RJ, legislatura ${camara[1]}`;
+    return `Câmara, deputados ${UF.preposicao} ${camara[1]}, legislatura ${camara[2]}`;
   }
   const senado = name.match(/^senado lista legislatura (\d+)$/);
   if (senado) {
@@ -33,7 +34,7 @@ export default function MethodPage() {
   const meta = getMeta();
   const sources = getSources();
   const roster = getRosterSemEmendas();
-  const stats = getStats() as { rows_total?: number; favorecidos?: { rows_matched?: number; favorecidos?: number; total_recebido?: number } };
+  const stats = getStats() as { rows_total?: number; roster_size?: number; roster_matched?: number; favorecidos?: { rows?: number; favorecidos?: number; total_recebido?: number } };
   const ipca = getIpca();
   const ipcaBase = `${ipca.base_month.slice(5, 7)}/${ipca.base_month.slice(0, 4)}`;
   const zip = sources[0];
@@ -41,6 +42,8 @@ export default function MethodPage() {
   const favStats = stats.favorecidos ?? {};
   const favTotal = formatBRL(favStats.total_recebido ?? getFavorecidos().reduce((sum, item) => sum + item.total, 0));
   const pagoTotal = formatBRL(getTotals().pago_total);
+  const bb = getFavorecidos().find((item) => item.codigo === BB_CODIGO);
+  const bbShare = bb && favStats.total_recebido ? Math.round((bb.total / favStats.total_recebido) * 100) : null;
 
   return (
     <Screen columns="minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1fr)" rows="minmax(0, 1fr)">
@@ -58,21 +61,21 @@ export default function MethodPage() {
           corrigido vem em primeiro plano, o nominal e o ano ao lado; a tecla N mostra nominal.
         </Row>
         <Row term="Bancada">
-          Quem exerceu mandato federal pelo Rio de Janeiro nas legislaturas 54 a 57 (2011 a 2027), titular ou suplente em exercício, pelas APIs da Câmara e do Senado: 158 pessoas,
-          130 com emenda executada.
+          Quem exerceu mandato federal {UF.pelo} {UF.nome} nas legislaturas 54 a 57 (2011 a 2027), titular ou suplente em exercício, pelas APIs da Câmara e do Senado:{" "}
+          {formatInt(stats.roster_size)} pessoas, {formatInt(stats.roster_matched)} com emenda executada.
         </Row>
-        <Row term="Bancada do RJ">
-          Emendas de bancada estadual (RP 7, código SIAFI 7120): propostas em nome do conjunto dos deputados e senadores do estado, decididas pela coordenação da bancada,
+        <Row term={BANCADA_CURTA}>
+          Emendas de bancada estadual (RP 7, código SIAFI {UF.bancadaSiafi}): propostas em nome do conjunto dos deputados e senadores do estado, decididas pela coordenação da bancada,
           impositivas desde 2019 e voltadas a projetos de maior porte. Autor coletivo, sem atribuição a pessoas.
         </Row>
         <Row term="Autor">
           O SIAFI dá um código de quatro dígitos e um nome. O nome, normalizado, é casado com nome civil, parlamentar ou eleitoral de alguém da bancada com mandato na legislatura
-          que fez o orçamento daquele ano. Um índice nacional de homônimos descarta coincidências: o “Bebeto” de 2016 a 2019 é da Bahia e fica fora; o de 2024 a 2026 é do Rio.
+          que fez o orçamento daquele ano. Um índice nacional de homônimos descarta coincidências: {UF.homonimos}
         </Row>
         <Row term="Favorecidos">
-          O arquivo “por favorecido” do mesmo download: {formatInt(favStats.rows_matched)} pagamentos a {formatInt(favStats.favorecidos)} CNPJs e CPFs (mascarados pelo Portal),
+          O arquivo “por favorecido” do mesmo download: {formatInt(favStats.rows)} pagamentos a {formatInt(favStats.favorecidos)} CNPJs e CPFs (mascarados pelo Portal),
           somando {favTotal} contra {pagoTotal} de pago. A diferença são devoluções, retenções e emendas sem linha de favorecido. O Banco do Brasil é o caixa dos repasses fundo a
-          fundo do SUS: 36% do total aparece em nome dele, não do fundo municipal que recebeu.
+          fundo do SUS: {bbShare ?? "–"}% do total aparece em nome dele, não do fundo municipal que recebeu.
         </Row>
         <Row term="Fora">
           O orçamento de 2014, sem autor. Emendas de relator (RP 9) e de comissão (RP 8), sem autor individual. Menos da metade das linhas nomeia município; o resto vai para o
@@ -112,7 +115,7 @@ export default function MethodPage() {
         </table>
       </Panel>
 
-      <Panel title={<b>Sem emenda executada</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">{roster.length} de 158</span>} flush fill>
+      <Panel title={<b>Sem emenda executada</b>} aside={<span className="text-[10px] tracking-[0.14em] text-ash">{roster.length} de {formatInt(stats.roster_size)}</span>} flush fill>
         <table className="ruled">
           <tbody>
             {roster.map((person) => (

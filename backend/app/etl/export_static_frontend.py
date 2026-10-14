@@ -1,12 +1,12 @@
 """Gera os arquivos estaticos do frontend a partir de ``data/snapshot.json``.
 
-Em ``frontend/lib``:
+Em ``frontend/data/<uf>`` (``rj``, ``sp``); o build do frontend le a pasta da UF que constroi:
 
 * ``static-data.generated.json``: anos, autores com totais e series anuais, destinos (municipios
-  do RJ com populacao), funcoes, agregados e fontes. Tudo que as telas mostram sem clicar.
+  da UF com populacao), funcoes, agregados e fontes. Tudo que as telas mostram sem clicar.
 * ``static-autores/<autor_id>.generated.json``: as emendas (linhas) de um autor.
 * ``static-destinos/<ibge>.generated.json``: as emendas destinadas a um municipio.
-* ``static-geo.generated.json``: geometrias dos municipios do RJ (malha do IBGE), so para o mapa.
+* ``static-geo.generated.json``: geometrias dos municipios da UF (malha do IBGE), so para o mapa.
 * ``static-favorecidos/<slug>.generated.json``: os recebimentos (pagamentos mes a mes) de um favorecido,
   so para os favorecidos que alguma lista do site alcanca (top 300 geral, top 8 por autor e por
   destino) ou que receberam >= R$ 1 mi.
@@ -15,7 +15,8 @@ Valores em reais nominais, por ano orcamentario da emenda. ``pago_total`` = pago
 restos a pagar pagos depois: o que de fato chegou ao destino ate a data do arquivo. ``ipca`` traz
 os fatores de correcao (IBGE/SIDRA) para o frontend multiplicar quando quiser reais de hoje.
 
-    python -m app.etl.export_static_frontend
+    python -m app.etl.export_static_frontend            # RJ -> frontend/data/rj
+    python -m app.etl.export_static_frontend --uf SP    # SP -> frontend/data/sp
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ import json
 import re
 import unicodedata
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -33,16 +35,42 @@ from .. import config, ipca
 from ..http import fetch_file
 from ..parsers.favorecidos import slug as favorecido_slug
 
-FRONTEND_LIB = config.ROOT / "frontend" / "lib"
-IBGE_RJ_MUNICIPALITIES_GEOJSON_URL = (
-    "https://servicodados.ibge.gov.br/api/v3/malhas/estados/33"
+FRONTEND_DATA = config.ROOT / "frontend" / "data"
+IBGE_MUNICIPALITIES_GEOJSON_URL = (
+    "https://servicodados.ibge.gov.br/api/v3/malhas/estados/{ibge}"
     "?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio"
 )
-IBGE_POPULATION_2022_URL = "https://apisidra.ibge.gov.br/values/t/4714/n6/in%20n3%2033/v/93/p/2022"
+IBGE_POPULATION_2022_URL = "https://apisidra.ibge.gov.br/values/t/4714/n6/in%20n3%20{ibge}/v/93/p/2022"
 GEO_PRECISION = 4  # ~10 m; de sobra para um coropletico do estado
 TOP = 8
-TOP_FAVORECIDOS = 300
-FAVORECIDO_DETALHE_MIN = 1_000_000.0  # favorecidos acima disso sempre ganham arquivo lazy
+
+
+@dataclass(frozen=True)
+class Limits:
+    """Quanto de favorecidos vai para o nucleo. Cada favorecido com arquivo lazy precisa de uma
+    entrada no nucleo (a tela de favorecidos so abre quem esta la), entao estes numeros mandam no
+    tamanho do nucleo e na quantidade de arquivos sob demanda."""
+
+    top_favorecidos: int = 300  # top geral por valor recebido
+    favorecidos_por_lista: int = TOP  # top por autor e por municipio
+    detalhe_min: float | None = 1_000_000.0  # acima disso todo favorecido ganha pagina; None desliga
+    top_destino: int = TOP  # autores e funcoes listados em cada municipio
+    # True: o nucleo leva so o top geral; os demais favorecidos com pagina vao para
+    # static-favorecidos-extra.generated.json, carregado quando alguem abre um deles.
+    nucleo_so_top: bool = False
+    inteiros: bool = False  # valores do nucleo em reais inteiros (o site nao mostra centavos)
+    # A tela de Destinos mostra, para municipio, 5 autores e 5 favorecidos (sem quebra anual) e
+    # nao mostra funcoes; False corta do nucleo o que a tela nao usa.
+    destino_completo: bool = True
+
+
+# SP tem 484 municipios com emenda; com os limites do RJ o nucleo teria 3,3 MB e 2.965 favorecidos.
+# Com estes fica no patamar do RJ (1,7 MB); toda pagina de favorecido continua existindo.
+LIMITS: dict[str, Limits] = {
+    "RJ": Limits(),
+    "SP": Limits(favorecidos_por_lista=5, detalhe_min=None, top_destino=5, nucleo_so_top=True, inteiros=True,
+                 destino_completo=False),
+}
 
 TIPO_CODES = {
     "Emenda Individual - Transferências com Finalidade Definida": "FD",
@@ -59,7 +87,7 @@ UF_SIGLAS = {
 SMALL_WORDS = {"de", "da", "do", "das", "dos", "e", "d"}
 SEM_FUNCAO = "Sem função informada"
 OUTROS_DESTINOS = {
-    "uf": "Estado do Rio de Janeiro, sem município",
+    "uf": "Estado {preposicao} {nome}, sem município",
     "multiplo": "Vários municípios",
     "nacional": "Nacional",
     "exterior": "Exterior",
@@ -183,12 +211,14 @@ def compact(row: dict[str, Any]) -> dict[str, Any]:
 # --- Favorecidos ---------------------------------------------------------------------------
 
 
-MUNICIPIO_ALIASES = {"TRAJANO DE MORAIS": "TRAJANO DE MORAES"}  # grafia do SIAFI -> grafia do IBGE
+def municipio_key(name: str | None, aliases: dict[str, str] | None = None) -> str:
+    """Nome de municipio comparavel: sem acento, caixa alta; ``aliases`` leva grafia do SIAFI -> IBGE
+    (por UF, em ``config.UFS``)."""
 
-
-def municipio_key(name: str | None) -> str:
-    key = strip_accents(name or "").upper().strip()
-    return MUNICIPIO_ALIASES.get(key, key)
+    key = re.sub(r"[^A-Z ]", " ", strip_accents(name or "").upper().replace("'", ""))
+    key = " ".join(key.split())
+    aliases = aliases if aliases is not None else config.uf_config("RJ").municipio_aliases
+    return aliases.get(key, key)
 
 
 def favorecido_brief(fav: dict[str, Any]) -> dict[str, Any]:
@@ -221,7 +251,8 @@ def top_favorecidos(valores: dict[str, dict[str, float]], fav_by_codigo: dict[st
 
 
 def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
-                        municipio_destino: dict[str, str | None]) -> dict[str, Any]:
+                        municipio_destino: dict[str, str | None], uf: str = "RJ",
+                        limits: Limits | None = None) -> dict[str, Any]:
     """Tudo que o site mostra sobre favorecidos: top geral, agregados, top por autor e por municipio
     (favorecidos sediados no municipio), e as linhas dos arquivos lazy."""
 
@@ -236,7 +267,8 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
             bucket["n_favorecidos"] += 1
             bucket["valor"] += fav["total_recebido"]
 
-    ibge_by_name = {municipio_key(name): code for code, name in ibge_names.items()}
+    aliases = config.uf_config(uf).municipio_aliases
+    ibge_by_name = {municipio_key(name, aliases): code for code, name in ibge_names.items()}
     por_autor: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
     por_destino: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
     linhas: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -248,8 +280,8 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
             bucket["n_recebimentos"] += 1
         year = str(rec["ano_mes"])[:4]
         por_autor[rec["autor_id"]][codigo][year] += rec["valor"]
-        if fav["uf"] == "RJ" and fav["municipio"]:
-            ibge = ibge_by_name.get(municipio_key(fav["municipio"]))
+        if fav["uf"] == uf and fav["municipio"]:
+            ibge = ibge_by_name.get(municipio_key(fav["municipio"], aliases))
             if ibge:
                 por_destino[ibge][codigo][year] += rec["valor"]
             else:
@@ -257,18 +289,23 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
         linhas[codigo].append({"c": rec["codigo_emenda"], "au": rec["autor_id"], "am": rec["ano_mes"],
                                "v": rec["valor"], "mn": municipio_destino.get(rec["codigo_emenda"])})
 
-    top = [favorecido_brief(fav) for fav in favorecidos[:TOP_FAVORECIDOS]]
-    autores = {autor_id: top_favorecidos(valores, fav_by_codigo) for autor_id, valores in por_autor.items()}
-    destinos = {ibge: top_favorecidos(valores, fav_by_codigo) for ibge, valores in por_destino.items()}
+    limits = limits or LIMITS.get(uf, Limits())
+    top = [favorecido_brief(fav) for fav in favorecidos[:limits.top_favorecidos]]
+    autores = {autor_id: top_favorecidos(valores, fav_by_codigo, limits.favorecidos_por_lista) for autor_id, valores in por_autor.items()}
+    destinos = {ibge: top_favorecidos(valores, fav_by_codigo, limits.favorecidos_por_lista) for ibge, valores in por_destino.items()}
 
     com_detalhe = {fav["codigo"] for fav in top}
-    com_detalhe.update(fav["codigo"] for fav in favorecidos if fav["total_recebido"] >= FAVORECIDO_DETALHE_MIN)
+    if limits.detalhe_min is not None:
+        com_detalhe.update(fav["codigo"] for fav in favorecidos if fav["total_recebido"] >= limits.detalhe_min)
     for lista in (*autores.values(), *destinos.values()):
         com_detalhe.update(item["codigo"] for item in lista)
     arquivos = {favorecido_slug(codigo): linhas[codigo] for codigo in com_detalhe}
-    # O nucleo leva todo favorecido que alguma lista do site linka, nao so os 300 maiores: senao o
-    # clique num favorecido de autor ou municipio nao tem pagina para abrir.
-    top = [favorecido_brief(fav) for fav in favorecidos if fav["codigo"] in com_detalhe]
+    # Todo favorecido que alguma lista do site linka precisa de entrada, nao so os 300 maiores: senao
+    # o clique num favorecido de autor ou municipio nao tem pagina para abrir. Com nucleo_so_top, as
+    # entradas fora do top geral vao para um arquivo a parte, carregado sob demanda.
+    no_nucleo = {fav["codigo"] for fav in top} if limits.nucleo_so_top else com_detalhe
+    top = [favorecido_brief(fav) for fav in favorecidos if fav["codigo"] in no_nucleo]
+    extra = [favorecido_brief(fav) for fav in favorecidos if fav["codigo"] in com_detalhe and fav["codigo"] not in no_nucleo]
 
     def rounded(buckets: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         return {key: {**b, "valor": round(b["valor"], 2)}
@@ -276,6 +313,7 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
 
     return {
         "top": top,
+        "extra": extra,
         "por_tipo": rounded(por_tipo),
         "por_natureza": rounded(por_natureza),
         "autores": autores,
@@ -286,7 +324,7 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
             "recebimentos": len(recebimentos),
             "total_recebido": round(sum(fav["total_recebido"] for fav in favorecidos), 2),
             "com_detalhe": len(arquivos),
-            "municipios_rj_sem_ibge": {k: round(v, 2) for k, v in sorted(municipios_sem_ibge.items(), key=lambda kv: -kv[1])},
+            "municipios_uf_sem_ibge": {k: round(v, 2) for k, v in sorted(municipios_sem_ibge.items(), key=lambda kv: -kv[1])},
         },
     }
 
@@ -294,23 +332,25 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
 # --- IBGE ----------------------------------------------------------------------------------
 
 
-def population_2022() -> dict[str, dict[str, Any]]:
-    """{ibge: {nome, populacao}} para os municipios do RJ (Censo 2022, SIDRA 4714)."""
+def population_2022(ufc: config.UfConfig) -> dict[str, dict[str, Any]]:
+    """{ibge: {nome, populacao}} para os municipios da UF (Censo 2022, SIDRA 4714)."""
 
-    path = fetch_file(IBGE_POPULATION_2022_URL, config.RAW_DIR / "ibge" / "population_rj_2022.json")
+    path = fetch_file(IBGE_POPULATION_2022_URL.format(ibge=ufc.ibge),
+                      config.RAW_DIR / "ibge" / f"population_{ufc.sigla.lower()}_2022.json")
     rows = json.loads(Path(path).read_text(encoding="utf-8"))
     output: dict[str, dict[str, Any]] = {}
     for row in rows[1:]:
         code = str(row.get("D1C") or "")
-        name = re.sub(r"\s*(\(RJ\)|-\s*RJ)\s*$", "", str(row.get("D1N") or ""))
+        name = re.sub(rf"\s*(\({ufc.sigla}\)|-\s*{ufc.sigla})\s*$", "", str(row.get("D1N") or ""))
         value = str(row.get("V") or "")
         if code and value.replace(".", "").isdigit():
             output[code] = {"nome": name, "populacao": int(float(value))}
     return output
 
 
-def municipality_geometries(names: dict[str, str]) -> dict[str, Any]:
-    path = fetch_file(IBGE_RJ_MUNICIPALITIES_GEOJSON_URL, config.RAW_DIR / "ibge" / "rj_municipalities_min.geojson")
+def municipality_geometries(names: dict[str, str], ufc: config.UfConfig) -> dict[str, Any]:
+    path = fetch_file(IBGE_MUNICIPALITIES_GEOJSON_URL.format(ibge=ufc.ibge),
+                      config.RAW_DIR / "ibge" / f"{ufc.sigla.lower()}_municipalities_min.geojson")
     collection = json.loads(Path(path).read_text(encoding="utf-8"))
     features = []
     for feature in collection.get("features", []):
@@ -340,11 +380,16 @@ def _round(value: Any) -> Any:
 # --- Export --------------------------------------------------------------------------------
 
 
-def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_LIB) -> dict[str, Any]:
+def export(snapshot_path: Path | None = None, out_dir: Path | None = None, uf: str = config.DEFAULT_UF) -> dict[str, Any]:
+    ufc = config.uf_config(uf)
+    snapshot_path = snapshot_path or ufc.snapshot_path
+    out_dir = out_dir or FRONTEND_DATA / ufc.sigla.lower()
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    if snapshot.get("uf", "RJ") != ufc.sigla:
+        raise ValueError(f"snapshot {snapshot_path} e da UF {snapshot.get('uf')}, nao {ufc.sigla}")
     rows: list[dict[str, Any]] = snapshot["emendas"]
     autores_meta = {autor["id"]: autor for autor in snapshot["autores"]}
-    population = population_2022()
+    population = population_2022(ufc)
     names = {code: info["nome"] for code, info in population.items()}
 
     overall = Group()
@@ -364,11 +409,11 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
         uf_code = str(row.get("uf_destino_ibge") or "")[:2]
         if uf_code not in UF_SIGLAS:
             uf_code = ""  # "-1" e vazio: destino nacional, exterior ou sem UF informada
-        if ibge and uf_code == "33":
+        if ibge and uf_code == ufc.ibge:
             por_destino[ibge].add(row)
             linhas_destino[ibge].append(compact(row))
-        elif uf_code == "33":
-            outros_destinos[row["localidade"]].add(row)  # "uf" ou "multiplo" dentro do RJ
+        elif uf_code == ufc.ibge:
+            outros_destinos[row["localidade"]].add(row)  # "uf" ou "multiplo" dentro da UF
         elif uf_code:
             outros_destinos["outras_ufs"].add(row)
         else:
@@ -382,7 +427,8 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
     for row in rows:  # municipio da emenda quando e um so; None quando a emenda tem varias localidades
         mn = title_case(row["municipio_destino"]) if row["municipio_destino"] else None
         municipio_destino[row["codigo"]] = mn if row["codigo"] not in municipio_destino or municipio_destino[row["codigo"]] == mn else None
-    favorecidos = favorecidos_section(snapshot, names, municipio_destino)
+    limits = LIMITS.get(ufc.sigla, Limits())
+    favorecidos = favorecidos_section(snapshot, names, municipio_destino, ufc.sigla, limits)
     destino_labels = {code: {"nome": info["nome"]} for code, info in population.items()}
     funcao_labels = {name: {"nome": name} for name in por_funcao}
 
@@ -426,9 +472,10 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
                 "populacao_2022": info["populacao"],
                 "totais": group.total.json(),
                 "por_ano": anos(group),
-                "autores": top(group.autores, autor_labels),
-                "funcoes": top(group.funcoes, funcao_labels),
-                "favorecidos": favorecidos["destinos"].get(code, []),
+                "autores": top(group.autores, autor_labels, limits.top_destino),
+                "funcoes": top(group.funcoes, funcao_labels, limits.top_destino) if limits.destino_completo else [],
+                "favorecidos": favorecidos["destinos"].get(code, []) if limits.destino_completo
+                else [{k: v for k, v in item.items() if k != "por_ano"} for item in favorecidos["destinos"].get(code, [])],
             }
         )
     destinos.sort(key=lambda destino: destino["totais"]["empenhado"], reverse=True)
@@ -461,6 +508,8 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
 
     core = {
         "generated_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "uf": ufc.sigla,
+        "bancada": {"id": ufc.bancada_id, "nome": ufc.bancada_nome, "codigo_siafi": ufc.bancada_codigo},
         "snapshot_generated_at": snapshot.get("generated_at"),
         "years": years,
         "latest_year": max(years),
@@ -474,7 +523,7 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
         # Destinos sem município: estado, vários municípios, nacional, exterior, outros estados.
         "outros_destinos": {
             key: {
-                "nome": OUTROS_DESTINOS.get(key, key),
+                "nome": OUTROS_DESTINOS.get(key, key).format(preposicao=ufc.preposicao, nome=ufc.nome),
                 "totais": group.total.json(),
                 "por_ano": anos(group),
                 "autores": top(group.autores, autor_labels),
@@ -494,9 +543,13 @@ def export(snapshot_path: Path = config.SNAPSHOT_PATH, out_dir: Path = FRONTEND_
         "stats": {**snapshot.get("stats", {}), "favorecidos_export": favorecidos["stats"]},
     }
 
+    if limits.inteiros:
+        core = {key: (value if key in ("ipca", "stats", "sources") else _inteiros(value)) for key, value in core.items()}
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "static-data.generated.json").write_text(_dumps(core), encoding="utf-8")
-    (out_dir / "static-geo.generated.json").write_text(_dumps(municipality_geometries(names)), encoding="utf-8")
+    extra = _inteiros(favorecidos["extra"]) if limits.inteiros else favorecidos["extra"]
+    (out_dir / "static-favorecidos-extra.generated.json").write_text(_dumps(extra), encoding="utf-8")
+    (out_dir / "static-geo.generated.json").write_text(_dumps(municipality_geometries(names, ufc)), encoding="utf-8")
     _write_many(out_dir / "static-autores", linhas_autor)
     _write_many(out_dir / "static-destinos", linhas_destino)
     _write_many(out_dir / "static-favorecidos", favorecidos["arquivos"], key=lambda line: (line["am"], line["c"]), reverse=True)
@@ -510,9 +563,23 @@ def _by_tipo(rows: list[dict[str, Any]]) -> dict[str, Group]:
     return groups
 
 
-def _display_name(meta: dict[str, Any]) -> str:
-    """Nome parlamentar quando existe; senao o nome civil em caixa normal."""
+def _inteiros(value: Any) -> Any:
+    """Arredonda para reais inteiros todo float de uma estrutura (so dinheiro: o IPCA fica de fora)."""
 
+    if isinstance(value, float):
+        return round(value)
+    if isinstance(value, list):
+        return [_inteiros(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _inteiros(item) for key, item in value.items()}
+    return value
+
+
+def _display_name(meta: dict[str, Any]) -> str:
+    """Nome parlamentar quando existe; senao o nome civil em caixa normal. Bancada: o nome com acento."""
+
+    if meta.get("casa") == "bancada" and meta.get("nome"):
+        return str(meta["nome"])
     name = str(meta.get("nome_parlamentar") or meta.get("nome") or meta.get("id") or "")
     return title_case(name) if name == name.upper() else name
 
@@ -539,16 +606,17 @@ def _dumps(payload: object) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--snapshot", type=Path, default=config.SNAPSHOT_PATH)
-    parser.add_argument("--out", type=Path, default=FRONTEND_LIB)
+    parser.add_argument("--uf", default=config.DEFAULT_UF, choices=sorted(config.UFS), help="UF da bancada (padrão RJ)")
+    parser.add_argument("--snapshot", type=Path, default=None, help="padrão: o snapshot da UF")
+    parser.add_argument("--out", type=Path, default=None, help="padrão: frontend/data/<uf>")
     args = parser.parse_args(argv)
-    core = export(args.snapshot, args.out)
+    core = export(args.snapshot, args.out, args.uf)
     fs = core["stats"]["favorecidos_export"]
-    print(f"{len(core['autores'])} autores, {len(core['destinos'])} destinos, {len(core['funcoes'])} funcoes, anos {core['years'][0]}-{core['years'][-1]}")
+    print(f"[{core['uf']}] {len(core['autores'])} autores, {len(core['destinos'])} destinos, {len(core['funcoes'])} funcoes, anos {core['years'][0]}-{core['years'][-1]}")
     print(f"favorecidos: {fs['favorecidos']} ({fs['com_detalhe']} com arquivo), top {len(core['favorecidos'])}, "
           f"ipca base {core['ipca']['base_month']} fator {core['years'][0]}={core['ipca']['factors'].get(str(core['years'][0]))}")
-    if fs["municipios_rj_sem_ibge"]:
-        print("municipios RJ sem IBGE:", fs["municipios_rj_sem_ibge"])
+    if fs["municipios_uf_sem_ibge"]:
+        print(f"municipios {core['uf']} sem IBGE:", fs["municipios_uf_sem_ibge"])
     return 0
 
 

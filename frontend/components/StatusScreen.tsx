@@ -55,7 +55,7 @@ export function StatusScreen({ generatedAt, latestYear, sources }: { generatedAt
   return (
     <Screen columns="minmax(0, 1fr) 360px" rows="auto minmax(0, 1fr)">
       <Panel title={<b>Atualização</b>}>
-        <div className="grid grid-cols-4 gap-x-6">
+        <div className="grid grid-cols-1">
           <Stat label="Última checagem" value={lastRun ? formatDateTime(lastRun.at) : "–"} sub={lastRun ? (lastRun.detail ? `${lastRun.result} (${lastRun.detail})` : lastRun.result) : unavailable ? "status indisponível" : undefined} />
           <Stat label="Último build" value={published ? formatDateTime(published.at) : formatDateTime(generatedAt)} sub={published?.key ? `commit ${published.key.split(" ")[0]}` : undefined} />
           <Stat label="Orçamentos até" value={String(status?.snapshot?.latest_year ?? latestYear)} sub={status?.snapshot?.ipca_base ? `IPCA de ${status.snapshot.ipca_base.slice(5, 7)}/${status.snapshot.ipca_base.slice(0, 4)}` : undefined} />
@@ -124,7 +124,7 @@ export function StatusScreen({ generatedAt, latestYear, sources }: { generatedAt
             <tr>
               <td>Linhas no arquivo / da bancada</td>
               <td className="num right">
-                {formatInt(status?.stats?.rows_total ?? null)} / {formatInt(status?.stats?.rows_rj ?? null)}
+                {formatInt(status?.stats?.rows_total ?? null)} / {formatInt(status?.stats?.rows_uf ?? status?.stats?.rows_rj ?? null)}
               </td>
             </tr>
           </tbody>

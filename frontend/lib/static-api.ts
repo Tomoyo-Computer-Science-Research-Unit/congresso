@@ -5,7 +5,8 @@
  * a pagar pagos depois.
  */
 
-import snapshot from "@/lib/static-data.generated.json";
+import snapshot from "@uf-data/static-data.generated.json";
+import { BANCADA_CURTA } from "@/lib/uf";
 
 export type Totais = {
   n: number;
@@ -128,7 +129,7 @@ export const METRICS: Array<{ key: Metric; label: string }> = [
 export const TIPO_LABELS: Record<string, string> = {
   FD: "Individual, finalidade definida",
   TE: "Individual, transferência especial",
-  BC: "Bancada do RJ"
+  BC: BANCADA_CURTA
 };
 export const LOCALIDADE_LABELS: Record<string, string> = {
   municipio: "município",
@@ -224,7 +225,11 @@ export function valueFor(porAno: Record<string, Brief>, totais: Brief | Totais, 
 }
 
 /** Nome curto para listas: nome parlamentar quando existe. */
-export function displayName(autor: Pick<Autor, "nome" | "nome_parlamentar">): string {
+export function displayName(autor: Pick<Autor, "nome" | "nome_parlamentar"> & { casa?: string | null }): string {
+  // A bancada vem do SIAFI sem acento ("BANCADA DE SAO PAULO"); o nome por extenso tem.
+  if (autor.casa === "bancada" && autor.nome) {
+    return autor.nome;
+  }
   return niceName(autor.nome_parlamentar || autor.nome);
 }
 
@@ -285,7 +290,7 @@ export async function loadLinhasAutor(id: string): Promise<Linha[]> {
     return cached;
   }
   try {
-    const module = (await import(`@/lib/static-autores/${id}.generated.json`)) as { default?: Linha[] };
+    const module = (await import(`@uf-data/static-autores/${id}.generated.json`)) as { default?: Linha[] };
     const lines = (module.default ?? module) as Linha[];
     linhasAutor.set(id, lines);
     return lines;
@@ -301,7 +306,7 @@ export async function loadLinhasDestino(ibge: string): Promise<Linha[]> {
     return cached;
   }
   try {
-    const module = (await import(`@/lib/static-destinos/${ibge}.generated.json`)) as { default?: Linha[] };
+    const module = (await import(`@uf-data/static-destinos/${ibge}.generated.json`)) as { default?: Linha[] };
     const lines = (module.default ?? module) as Linha[];
     linhasDestino.set(ibge, lines);
     return lines;
@@ -319,7 +324,7 @@ export async function loadRecebimentos(slug: string): Promise<Recebimento[]> {
     return cached;
   }
   try {
-    const module = (await import(`@/lib/static-favorecidos/${slug}.generated.json`)) as { default?: Recebimento[] };
+    const module = (await import(`@uf-data/static-favorecidos/${slug}.generated.json`)) as { default?: Recebimento[] };
     const rows = (module.default ?? module) as Recebimento[];
     recebimentosCache.set(slug, rows);
     return rows;
@@ -329,11 +334,30 @@ export async function loadRecebimentos(slug: string): Promise<Recebimento[]> {
   }
 }
 
+let favorecidosExtra: Favorecido[] | null = null;
+
+/**
+ * Favorecidos que alguma lista de autor ou município linka mas que ficaram fora do núcleo (em SP o
+ * núcleo leva só os 300 maiores). Um arquivo só, carregado quando alguém abre um deles.
+ */
+export async function loadFavorecidosExtra(): Promise<Favorecido[]> {
+  if (favorecidosExtra) {
+    return favorecidosExtra;
+  }
+  try {
+    const module = (await import("@uf-data/static-favorecidos-extra.generated.json")) as { default?: Favorecido[] };
+    favorecidosExtra = (module.default ?? module) as Favorecido[];
+  } catch {
+    favorecidosExtra = [];
+  }
+  return favorecidosExtra;
+}
+
 export async function loadGeo(): Promise<GeoFeatureCollection> {
   if (geo) {
     return geo;
   }
-  const module = (await import("@/lib/static-geo.generated.json")) as { default?: GeoFeatureCollection };
+  const module = (await import("@uf-data/static-geo.generated.json")) as { default?: GeoFeatureCollection };
   geo = (module.default ?? module) as GeoFeatureCollection;
   return geo;
 }

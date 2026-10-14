@@ -284,7 +284,10 @@ dd {
   border: 1px solid var(--line-strong);
 }
 
-.segmented button {
+.segmented button,
+.segmented a {
+  display: inline-flex;
+  align-items: center;
   height: 32px;
   padding: 0 12px;
   background: transparent;
@@ -299,11 +302,17 @@ dd {
   transition: background 0.3s var(--ease), color 0.3s var(--ease);
 }
 
-.segmented button:last-child {
+.segmented button:last-child,
+.segmented a:last-child {
   border-right: 0;
 }
 
-.segmented button[aria-pressed="true"] {
+.segmented a:hover {
+  color: var(--ink);
+}
+
+.segmented button[aria-pressed="true"],
+.segmented a[aria-current="page"] {
   background: var(--ink);
   color: var(--paper);
 }

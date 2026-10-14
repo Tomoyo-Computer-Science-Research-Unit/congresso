@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BarList } from "@/components/BarList";
+import { UF } from "@/lib/uf";
 import { useScreenHotkeys } from "@/components/Hotkeys";
 import { EmptyState, Panel, Screen, Segmented, Stat } from "@/components/ui";
 import { YearBars } from "@/components/YearBars";
@@ -172,8 +173,8 @@ export function AutoresExplorer() {
             <span>
               <b className="serif text-[16px]">{displayName(selected)}</b>
               <span className="mt-0.5 block text-[10.5px] tracking-[0.12em] text-ash">
-                {selected.id === "bancada-rj"
-                  ? "emendas de bancada (RP 7): coletivas, propostas pela bancada federal do RJ, sem autor individual · código SIAFI 7120"
+                {selected.id === UF.bancadaId
+                  ? `emendas de bancada (RP 7): coletivas, propostas pela bancada federal ${UF.preposicao} ${UF.code}, sem autor individual · código SIAFI ${UF.bancadaSiafi}`
                   : [titleCase(selected.nome ?? ""), selected.partido, selected.casas.map((item) => CASA_LABELS[item] ?? item).join(" e "), selected.legislaturas.length ? `legislaturas ${selected.legislaturas.join(", ")}` : null, selected.codigos_siafi.length ? `SIAFI ${selected.codigos_siafi.join(", ")}` : null]
                       .filter(Boolean)
                       .join(" · ")}
@@ -277,7 +278,7 @@ export function AutoresExplorer() {
                   <td className="num faint">{linha.n}</td>
                   <td className="faint">{linha.t}</td>
                   <td className="max-w-[150px] whitespace-normal break-words" title={linha.mn ?? undefined}>
-                    {linha.mn ? `${linha.mn}${linha.uf && linha.uf !== "RJ" ? ` (${linha.uf})` : ""}` : LOCALIDADE_LABELS[linha.loc] ?? linha.loc}
+                    {linha.mn ? `${linha.mn}${linha.uf && linha.uf !== UF.code ? ` (${linha.uf})` : ""}` : LOCALIDADE_LABELS[linha.loc] ?? linha.loc}
                   </td>
                   <td className="max-w-[120px] whitespace-normal break-words" title={linha.sf}>
                     {linha.f}

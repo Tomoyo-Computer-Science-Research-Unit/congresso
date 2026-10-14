@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "test": "playwright test",
-    "test:visual": "playwright test"
+    "test:visual": "playwright test && PW_UF=SP playwright test",
+    "test:visual:sp": "PW_UF=SP playwright test",
+    "build:sp": "NEXT_PUBLIC_UF=SP next build"
   },
   "dependencies": {
     "next": "^15.0.0",

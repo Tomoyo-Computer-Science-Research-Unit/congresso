@@ -1,7 +1,11 @@
 """Run the whole ETL and write data/snapshot.json.
 
-    python -m app.etl.export_snapshot            # uses cached downloads when present
-    python -m app.etl.export_snapshot --refresh  # re-download the Portal zip
+    python -m app.etl.export_snapshot                    # RJ, uses cached downloads when present
+    python -m app.etl.export_snapshot --refresh          # re-download the Portal zip
+    python -m app.etl.export_snapshot --uf SP            # São Paulo -> data/snapshot-sp.json
+
+The Portal zip is national: one download serves every UF. Run the first UF with --refresh and
+the others without it so the same file is read again instead of fetched twice.
 """
 from __future__ import annotations
 
@@ -20,9 +24,6 @@ from ..parsers.favorecidos import MEMBER as FAVORECIDOS_MEMBER
 from ..match import Matcher
 from ..parsers.emendas import EmendaRow, iter_zip_member
 from ..roster import build_roster
-
-RJ_UF_IBGE = "3300000"
-
 
 def _agg_key(d: dict[str, Any], *keys: str) -> dict[str, Any]:
     for k in keys:
@@ -53,10 +54,12 @@ def emenda_json(r: EmendaRow, autor_id: str | None, quality: str) -> dict[str, A
     }
 
 
-def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[str, Any]:
+def run(out_path: Path | None = None, refresh: bool = False, uf: str = config.DEFAULT_UF) -> dict[str, Any]:
+    ufc = config.uf_config(uf)
+    out_path = out_path or ufc.snapshot_path
     accessed = datetime.now(timezone.utc).isoformat(timespec="seconds")
     zip_path = fetch_file(config.PORTAL_ZIP_URL, config.RAW_DIR / "EmendasParlamentares.zip", force=refresh)
-    roster = build_roster()
+    roster = build_roster(ufc.sigla)
     matcher = Matcher(roster)
     people = roster.by_id()
 
@@ -64,7 +67,7 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
     total_rows = 0
     years: set[int] = set()
     rows_by_year_all: Counter[int] = Counter()
-    no_author_rows_rj_dest: Counter[int] = Counter()
+    no_author_rows_uf_dest: Counter[int] = Counter()
     por_autor_ano: dict[str, Any] = {}
     por_municipio_ano: dict[str, Any] = {}
     por_funcao_ano: dict[str, Any] = {}
@@ -78,11 +81,11 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
         years.add(r.ano)
         rows_by_year_all[r.ano] += 1
         if r.autor_codigo is None:
-            if r.uf_ibge == RJ_UF_IBGE:
-                no_author_rows_rj_dest[r.ano] += 1
+            if r.uf_ibge == ufc.uf_ibge_full:
+                no_author_rows_uf_dest[r.ano] += 1
             continue
-        if r.autor_codigo == config.BANCADA_RJ_CODIGO:
-            autor_id, quality = "bancada-rj", "bancada"
+        if r.autor_codigo == ufc.bancada_codigo:
+            autor_id, quality = ufc.bancada_id, "bancada"
         elif r.tipo.startswith("Emenda Individual") or r.tipo.startswith("Emenda de Comiss"):
             m = matcher.match(r.autor_nome or "", r.ano)
             matcher.stats.by_quality[m.quality] += 1
@@ -109,9 +112,9 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
 
     autores = []
     for pid in sorted(autores_usados):
-        if pid == "bancada-rj":
-            autores.append({"id": pid, "nome": "Bancada do Rio de Janeiro", "nome_parlamentar": "BANCADA DO RIO DE JANEIRO",
-                            "casa": "bancada", "casas": [], "ids": {"siafi": config.BANCADA_RJ_CODIGO},
+        if pid == ufc.bancada_id:
+            autores.append({"id": pid, "nome": ufc.bancada_nome, "nome_parlamentar": ufc.bancada_siafi_nome,
+                            "casa": "bancada", "casas": [], "ids": {"siafi": ufc.bancada_codigo},
                             "partido_por_legislatura": {}, "legislaturas": [], "mandatos": [], "foto": None,
                             "codigos_siafi": sorted(siafi_codes_by_autor[pid])})
             continue
@@ -122,10 +125,11 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
 
     # Second member of the zip: payments by favorecido, only for the amendments kept above.
     autor_by_codigo = {e["codigo"]: e["autor_id"] for e in emendas}
-    favorecidos, recebimentos, fav_stats = collect_from_zip(zip_path, autor_by_codigo)
+    favorecidos, recebimentos, fav_stats = collect_from_zip(zip_path, autor_by_codigo, ufc.bancada_codigo, ufc.bancada_id)
 
     snapshot = {
         "generated_at": accessed,
+        "uf": ufc.sigla,
         "years": sorted(years),
         "autores": autores,
         "roster": roster_all,
@@ -152,11 +156,11 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
         "stats": {
             "rows_total": total_rows,
             "rows_by_year_all": dict(sorted(rows_by_year_all.items())),
-            "rows_rj": len(emendas),
-            "rows_without_author_dest_rj_by_year": dict(sorted(no_author_rows_rj_dest.items())),
+            "rows_uf": len(emendas),
+            "rows_without_author_dest_uf_by_year": dict(sorted(no_author_rows_uf_dest.items())),
             "match_by_quality": dict(matcher.stats.by_quality),
             "roster_size": len(roster.pessoas),
-            "roster_matched": len([a for a in autores if a["id"] != "bancada-rj"]),
+            "roster_matched": len([a for a in autores if a["id"] != ufc.bancada_id]),
             "collisions": {k: sorted(v) for k, v in sorted(matcher.stats.collisions.items())},
             "unmatched_collision_names": dict(matcher.stats.unmatched_names.most_common()),
             "favorecidos": fav_stats,
@@ -170,18 +174,20 @@ def run(out_path: Path = config.SNAPSHOT_PATH, refresh: bool = False) -> dict[st
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--refresh", action="store_true", help="re-download the Portal zip")
-    ap.add_argument("--out", type=Path, default=config.SNAPSHOT_PATH)
+    ap.add_argument("--uf", default=config.DEFAULT_UF, choices=sorted(config.UFS), help="UF da bancada (padrão RJ)")
+    ap.add_argument("--out", type=Path, default=None, help="padrão: data/snapshot.json (RJ) ou data/snapshot-<uf>.json")
     a = ap.parse_args(argv)
-    s = run(a.out, a.refresh)
+    out = a.out or config.uf_config(a.uf).snapshot_path
+    s = run(out, a.refresh, a.uf)
     st = s["stats"]
-    print(f"rows total={st['rows_total']} rj={st['rows_rj']} autores={len(s['autores'])} roster={st['roster_size']}")
+    print(f"[{s['uf']}] rows total={st['rows_total']} uf={st['rows_uf']} autores={len(s['autores'])} roster={st['roster_size']}")
     print("match:", st["match_by_quality"])
     for y, v in s["agregados"]["por_ano"].items():
         print(f"{y}: n={v['n']:5d} empenhado={v['empenhado']/1e6:10.1f}M pago={v['pago']/1e6:10.1f}M rp_pago={v['rp_pago']/1e6:8.1f}M")
     fs = st["favorecidos"]
     print(f"favorecidos: rows={fs['rows']} distinct={fs['favorecidos']} emendas={fs['emendas_com_favorecido']}"
           f" total={fs['total_recebido']/1e6:.1f}M meses {fs['ano_mes_min']}..{fs['ano_mes_max']}")
-    print(f"wrote {a.out} ({a.out.stat().st_size/1e6:.1f} MB)")
+    print(f"wrote {out} ({out.stat().st_size/1e6:.1f} MB)")
     return 0
 
 

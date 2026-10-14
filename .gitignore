@@ -12,3 +12,5 @@ data/raw/
 data/snapshot.json
 .claude/
 *.log
+frontend/out-test-*/
+data/snapshot-*.json

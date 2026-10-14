@@ -1,12 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { NAV_ITEMS } from "@/components/SiteNav";
+import { UF, UF_CODES, ufHref } from "@/lib/uf";
 
-/** Teclas globais: 1–7 trocam de tela, T inverte o tema nesta visita. Ignora campos de formulário. */
+/** Teclas globais: 1–6 trocam de tela, T inverte o tema nesta visita, U passa para a outra UF na
+ * mesma tela. Ignora campos de formulário. */
 export function Hotkeys() {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -19,6 +22,12 @@ export function Hotkeys() {
         router.push(item.href);
         return;
       }
+      if (event.key === "u" || event.key === "U") {
+        event.preventDefault();
+        const next = UF_CODES[(UF_CODES.indexOf(UF.code) + 1) % UF_CODES.length];
+        window.location.assign(ufHref(next, pathname || "/"));
+        return;
+      }
       if (event.key === "t" || event.key === "T") {
         const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
         document.documentElement.dataset.theme = next;
@@ -27,7 +36,7 @@ export function Hotkeys() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router]);
+  }, [router, pathname]);
 
   return null;
 }

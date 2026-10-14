@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BarList } from "@/components/BarList";
+import { BANCADA_CURTA } from "@/lib/uf";
 import { useScreenHotkeys } from "@/components/Hotkeys";
 import { Panel, Screen, Segmented, Stat } from "@/components/ui";
 import { YearBars } from "@/components/YearBars";
@@ -107,7 +108,7 @@ export function Panorama() {
       <Panel
         title={
           <span>
-            <b>Bancada do RJ</b> · {yearLabel}
+            <b>{BANCADA_CURTA}</b> · {yearLabel}
           </span>
         }
         aside={

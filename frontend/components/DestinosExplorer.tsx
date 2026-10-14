@@ -3,6 +3,7 @@
 import type { Geometry } from "geojson";
 import { useEffect, useMemo, useState } from "react";
 import { BarList } from "@/components/BarList";
+import { DO_ESTADO } from "@/lib/uf";
 import { useScreenHotkeys } from "@/components/Hotkeys";
 import { Panel, Screen, Segmented, Stat } from "@/components/ui";
 import { YearSelect, stepYear, type YearSel } from "@/components/YearSelect";
@@ -176,7 +177,7 @@ export function DestinosExplorer() {
       >
         <div className="map-wrap relative min-h-0 flex-1">
           {geo ? (
-            <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Mapa do estado do Rio de Janeiro por municípios" className="block h-full w-full">
+            <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`Mapa do estado ${DO_ESTADO} por municípios`} className="block h-full w-full">
               {geo.features.map((feature) => {
                 const ibge = feature.properties.ibge;
                 const rank = rankByIbge.get(ibge);

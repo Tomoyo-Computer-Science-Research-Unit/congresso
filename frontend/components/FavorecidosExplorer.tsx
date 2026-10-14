@@ -15,6 +15,7 @@ import {
   getAutores,
   getFavorecidos,
   getYears,
+  loadFavorecidosExtra,
   loadRecebimentos,
   niceName,
   type Favorecido,
@@ -53,7 +54,10 @@ function realTotal(favorecido: Favorecido): number {
 }
 
 export function FavorecidosExplorer() {
-  const all = getFavorecidos();
+  const core = getFavorecidos();
+  // Favorecido aberto por link de autor ou município e que não está no núcleo (ver loadFavorecidosExtra).
+  const [extra, setExtra] = useState<Favorecido | null>(null);
+  const all = useMemo(() => (extra ? [...core, extra] : core), [core, extra]);
   const years = getYears();
   const { real } = useMoneyMode();
   const autores = useMemo(() => new Map(getAutores().map((autor) => [autor.id, autor])), []);
@@ -64,11 +68,22 @@ export function FavorecidosExplorer() {
 
   useEffect(() => {
     const slug = new URLSearchParams(window.location.search).get("f");
-    if (slug && all.some((item) => item.slug === slug)) {
+    if (slug && core.some((item) => item.slug === slug)) {
       setSelectedSlug(slug);
+      setHydrated(true);
+    } else if (slug) {
+      loadFavorecidosExtra().then((items) => {
+        const found = items.find((item) => item.slug === slug);
+        if (found) {
+          setExtra(found);
+          setSelectedSlug(slug);
+        }
+        setHydrated(true);
+      });
+    } else {
+      setHydrated(true);
     }
-    setHydrated(true);
-  }, [all]);
+  }, [core]);
   useEffect(() => {
     if (hydrated) {
       window.history.replaceState(null, "", `${window.location.pathname}?f=${encodeURIComponent(selectedSlug)}`);

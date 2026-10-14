@@ -1,4 +1,4 @@
-# FINDINGS — emendas parlamentares da bancada fluminense
+# FINDINGS — emendas parlamentares da bancada fluminense (e da paulista, seção 8)
 
 Prototype data layer. Written 2026-10-13/14 after running the ETL end to end. Everything below was
 observed, not assumed; numbers come from the files cached under `data/raw/` and from `data/snapshot.json`.
@@ -563,3 +563,75 @@ primary figure with the nominal and the budget year stacked small to its right, 
 `white-space: nowrap`, put the full sentence ("R$ X nominais em 2019 → R$ Y de set/2026, IPCA") in
 a tooltip, and skip the adjustment when the factor is below some threshold (gwern uses 1.20;
 with IPCA that would hide 2022–2026).
+
+## 8. São Paulo (added 2026-10-14)
+
+Same zip, same code path: `python -m app.etl.export_snapshot --uf SP` and
+`python -m app.etl.export_static_frontend --uf SP` (snapshot `data/snapshot-sp.json`, frontend data
+`frontend/data/sp/`). Per-UF constants live in `app/config.py` (`UFS`); nothing else is
+state-specific in the backend. Run on the zip of 2026-10-10 (sha256 `669d4524…`, 32,490,844 bytes;
+the SP run read the cached file, it did not download again).
+
+- Bancada code: `7125 BANCADA DE SAO PAULO` (66 rows), found among the `71xx` codes of the CSV
+  (7102 Acre … 7128 Tocantins, one per state). Collective author `bancada-sp`.
+- Roster: **211 people** who exercised an SP federal mandate in legislaturas 54–57 (Câmara list
+  filtered on `siglaUf == "SP"`: 91 / 83 / 81 / 90 deputies per legislature; Senado
+  `UfParlamentar == "SP"` with exercise: 4 / 5 / 5 / 3). Four people served in both houses and are
+  merged: Antonio Carlos Rodrigues, José Aníbal, Major Olimpio, Mara Gabrilli. First run fetched 211
+  `/deputados/{id}` details (~80 s); the national Câmara listings were already cached from RJ.
+- Matching: 9,511 strict rows, **0 loose, 0 excluded collisions**; 176 of 211 people have at least
+  one executed amendment. Unmatched SP-looking individual authors (≥ 40 % of rows destined to SP,
+  code not matched): **0**.
+- National homonym index: one name of the SP roster also exists outside it, `ROBERTO FREIRE`
+  (`senado:71`). It is the same man: deputy for SP in legislaturas 54–55 (Câmara 73805) and listed
+  by the Senado as 1º suplente for PE in legislatura 54, never in exercise. His 17 rows (2015,
+  SIAFI 1234) match strict to the SP deputy and stay; the collision is only logged.
+- Multi-code authors: Mara Gabrilli 2807/4094, Major Olimpio 3712/9229, Missionário José Olimpio
+  2809/3088, João Cury 3597/4551, Ribamar Silva 4200/4545. Reassigned codes: 3088 is
+  `MISSIONARIO JOSE OLIMPIO (EX-PARLAMENTAR EDUARDO BOLSONARO, NOS TERMOS DA DECISAO ADPF 854…`
+  (3 rows, attributed to Missionário José Olimpio as SIAFI records them), 3597 João Cury Neto ex
+  Alberto Mourão (6 rows), 4200 Ribamar Silva ex Ricardo Silva (2 rows), both art. 78 LDO 2025.
+- Rows kept: **9,577** (9,574 distinct codes): Finalidade Definida 9,021 · Transferências
+  Especiais 490 · Bancada SP 66. Destination: SP 8,651 · no UF 823 · PB 17 · DF 13 · MG 11 · others.
+  Localidade: múltiplo 3,663 · município 2,852 · uf 2,323 · nacional 715 · exterior 21 · outro 3.
+  Author-less rows destined to SP (not kept): 2014 1,391 · 2016 7 · 2017 466 · 2018 1 · 2019 7 · 2020 7.
+
+| ano | rows | empenhado | liquidado | pago | RP pagos |
+|---|---:|---:|---:|---:|---:|
+| 2015 | 499 | 378.4 | 6.3 | 3.2 | 310.5 |
+| 2016 | 750 | 887.0 | 168.2 | 165.0 | 640.2 |
+| 2017 | 723 | 1,012.6 | 129.7 | 129.0 | 779.1 |
+| 2018 | 757 | 1,152.8 | 558.1 | 556.9 | 502.4 |
+| 2019 | 1,091 | 1,227.6 | 638.4 | 636.2 | 480.4 |
+| 2020 | 844 | 1,348.9 | 929.2 | 922.6 | 346.2 |
+| 2021 | 839 | 1,423.1 | 918.8 | 914.5 | 434.3 |
+| 2022 | 793 | 1,534.2 | 1,054.9 | 1,045.0 | 438.4 |
+| 2023 | 769 | 2,662.0 | 2,236.0 | 2,230.1 | 351.0 |
+| 2024 | 933 | 3,125.7 | 2,358.5 | 2,351.3 | 601.2 |
+| 2025 | 835 | 3,186.8 | 2,379.6 | 2,366.7 | 388.6 |
+| 2026 | 744 | 2,868.8 | 1,654.4 | 1,647.6 | 0.0 |
+
+(R$ mi nominal.) Total 2015–2026: empenhado R$ 20.81 bi, pago R$ 12.97 bi, RP pagos R$ 5.27 bi.
+Largest authors by empenhado (R$ mi): Bancada de SP 2,473 · Mara Gabrilli 372 · Giordano 289 ·
+Pastor Marco Feliciano 260 · Jefferson Campos 257 · Carlos Zarattini 254 · Tiririca 254 · Alex
+Manente 254 · Miguel Lombardi 252 · Nilto Tatto 251. Largest municipalities by pago + RP pago
+(R$ mi): São Paulo 255.1 · Carapicuíba 168.6 · Embu das Artes 162.8 · Osasco 56.0 · Itapevi 51.5 ·
+Praia Grande 50.7 · Guarulhos 48.3 · Campinas 37.8 · Cotia 36.8 · Mauá 35.6. 484 of the 645
+municipalities have at least one amendment with a named município.
+
+Favorecidos: 55,166 payment rows to 8,738 favorecidos, R$ 18,136.6 mi received vs R$ 18,240.5 mi
+pago + RP pago (gap 0.6 %); 683 amendments without a favorecido row; 0 author-code disagreements.
+Banco do Brasil (SUS fundo a fundo) is **40 %** of the money (R$ 7,273 mi; the pattern stops after
+2024 as in RJ). By UF of the favorecido: SP 10,276 · DF 7,429 · RJ 144 (R$ mi). The top 300 hold
+75 % of the money (88 % in RJ); 1,621 favorecidos received ≥ R$ 1 mi. Favorecido municipality
+names needing aliases against IBGE: `EMBU` → Embu das Artes, `SÃO LUÍS DO PARAITINGA` → São Luiz
+do Paraitinga, `FLORÍNIA` → Florínea (`UFS["SP"].municipio_aliases`); 0 unmatched after that.
+
+Frontend size. With the RJ limits the SP core would be 3.3 MB with 2,965 favorecidos. SP uses
+`LIMITS["SP"]` in `export_static_frontend.py`: core keeps the top 300 favorecidos only; the other
+2,083 favorecidos that some author or municipality list links to go to
+`static-favorecidos-extra.generated.json` (668 KB, loaded when one of them is opened); lists per
+author/municipality keep 5 favorecidos; municipality entries keep 5 authors and drop the função
+list and per-year favorecido split the Destinos screen does not show; core money in whole reais.
+Result: core 1.77 MB (313 KB gzip) vs RJ 1.74 MB (314 KB gzip); 2,383 favorecido files (11 MB),
+177 author files (3.1 MB), 484 municipality files (2.3 MB), geometry 645 municipalities (288 KB).

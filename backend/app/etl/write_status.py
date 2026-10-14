@@ -1,8 +1,8 @@
 """Escreve o ``status.json`` servido em ``/emendas/status.json``: ultima rodada, ultimo build,
 arquivo do Portal (local e no servidor deles) e as ultimas execucoes.
 
-    python -m app.etl.write_status --core ../frontend/lib/static-data.generated.json \
-        --runs /root/g0v/runs-emendas.jsonl --out /root/g0v/site/emendas/status.json
+    python -m app.etl.write_status --uf RJ --runs /root/g0v/runs-emendas.jsonl --out /root/g0v/site/emendas/status.json
+    python -m app.etl.write_status --uf SP --runs /root/g0v/runs-emendas.jsonl --out /root/g0v/site/emendas/sp/status.json
 """
 
 from __future__ import annotations
@@ -57,18 +57,21 @@ def build_status(core: dict[str, Any], runs: list[dict[str, Any]], do_probe: boo
         "last_published": published[-1] if published else None,
         "runs": list(reversed(runs[-RUNS_KEPT:])),
         "sources": sources,
-        "stats": {key: core.get("stats", {}).get(key) for key in ("rows_total", "rows_rj", "roster_size", "roster_matched")},
+        "uf": core.get("uf"),
+        "stats": {key: core.get("stats", {}).get(key) for key in ("rows_total", "rows_uf", "roster_size", "roster_matched")},
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--core", type=Path, default=config.ROOT / "frontend" / "lib" / "static-data.generated.json")
+    parser.add_argument("--uf", default=config.DEFAULT_UF, choices=sorted(config.UFS))
+    parser.add_argument("--core", type=Path, default=None, help="padrão: frontend/data/<uf>/static-data.generated.json")
     parser.add_argument("--runs", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--no-probe", action="store_true")
     args = parser.parse_args(argv)
-    core = json.loads(args.core.read_text(encoding="utf-8"))
+    core_path = args.core or config.ROOT / "frontend" / "data" / args.uf.lower() / "static-data.generated.json"
+    core = json.loads(core_path.read_text(encoding="utf-8"))
     status = build_status(core, read_runs(args.runs), do_probe=not args.no_probe)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(status, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

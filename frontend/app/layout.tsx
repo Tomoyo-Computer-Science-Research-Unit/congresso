@@ -6,17 +6,18 @@ import { Hotkeys } from "@/components/Hotkeys";
 import { SiteNav } from "@/components/SiteNav";
 import { StatusBar } from "@/components/StatusBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UfSwitch } from "@/components/UfSwitch";
 import { MoneyProvider } from "@/lib/money";
 import { getMeta } from "@/lib/static-api";
 import { cursorVars } from "@/lib/cursors";
+import { DO_ESTADO, UF } from "@/lib/uf";
 import "./globals.css";
 
 const mincho = Shippori_Mincho_B1({ weight: ["500", "700"], subsets: ["latin"], variable: "--font-mincho", display: "swap" });
 const archivo = Archivo({ subsets: ["latin"], weight: "variable", axes: ["wdth"], variable: "--font-archivo", display: "swap" });
 
 export const SITE_NAME = "Emendas";
-const DESCRIPTION =
-  "Emendas parlamentares da bancada federal do Rio de Janeiro desde 2015: quem enviou, quanto, para onde e em quê, a partir do Portal da Transparência.";
+const DESCRIPTION = `Emendas parlamentares da bancada federal ${DO_ESTADO} desde 2015: quem enviou, quanto, para onde e em quê, a partir do Portal da Transparência.`;
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const SITE_URL = `https://g0v.tomoyo.systems${BASE_PATH}`;
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
   authors: [{ name: "Tomoyo", url: "https://tomoyo.systems" }],
   creator: "Tomoyo",
   publisher: "Tomoyo",
-  keywords: ["Rio de Janeiro", "emendas parlamentares", "favorecidos", "orçamento", "Portal da Transparência", "deputados federais", "senadores", "dados públicos"],
+  keywords: [UF.nome, "emendas parlamentares", "favorecidos", "orçamento", "Portal da Transparência", "deputados federais", "senadores", "dados públicos"],
   alternates: { canonical: "/" },
   twitter: { card: "summary", title: SITE_NAME, description: DESCRIPTION },
   icons: { icon: `${BASE_PATH}/icon.png`, shortcut: `${BASE_PATH}/icon.png`, apple: `${BASE_PATH}/icon.png` },
@@ -78,7 +79,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               </Link>
             </span>
             <SiteNav />
-            <ThemeToggle />
+            <span className="flex shrink-0 items-center gap-3">
+              <UfSwitch />
+              <ThemeToggle />
+            </span>
           </header>
           <main className="app__main">{children}</main>
           <StatusBar latestLabel={label} />
