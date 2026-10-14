@@ -1,0 +1,10 @@
+{"pessoas": [
+ {"id": "camara-74848", "nome": "Jandira Feghali", "nome_parlamentar": "Jandira Feghali", "casa": "camara", "ids": {"camara": "74848"}, "foto": null,
+  "mandatos": [{"legislatura": 54, "casa": "camara", "partido": "PCdoB", "inicio": "2011-02-01", "fim": "2015-01-31"},
+               {"legislatura": 55, "casa": "camara", "partido": "PCdoB", "inicio": "2015-02-01", "fim": "2019-01-31"}]},
+ {"id": "camara-1", "nome": "Marcelo Ramos da Silva", "nome_parlamentar": "Marcelo Ramos", "casa": "camara", "ids": {"camara": "1"}, "foto": null,
+  "mandatos": [{"legislatura": 55, "casa": "camara", "partido": "X", "inicio": "2015-02-01", "fim": "2019-01-31"}]},
+ {"id": "senado-5322", "nome": "Romario de Souza Faria", "nome_parlamentar": "Romário", "casa": "senado", "ids": {"senado": "5322"}, "foto": null,
+  "mandatos": [{"legislatura": 55, "casa": "senado", "partido": "PL", "inicio": "2015-02-01", "fim": "2019-01-31"}]}
+],
+ "national_names": {"JANDIRA FEGHALI": ["camara:74848"], "MARCELO RAMOS": ["camara:1", "camara:999"], "ROMARIO": ["senado:5322"]}}
