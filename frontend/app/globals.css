@@ -945,21 +945,17 @@ html.fx[data-theme="dark"] .detail {
 
 /* Emendas: o efeito de impressão alcança tudo que tem texto ou traço, gráficos inclusive. */
 html.fx .barlist,
-html.fx .chart,
 html.fx .stat,
 html.fx .prose-fx,
 html.fx .yearselect,
-html.fx .wordmark,
-html.fx .map-wrap {
+html.fx .wordmark {
   filter: url(#print-fx-light);
 }
 html.fx[data-theme="dark"] .barlist,
-html.fx[data-theme="dark"] .chart,
 html.fx[data-theme="dark"] .stat,
 html.fx[data-theme="dark"] .prose-fx,
 html.fx[data-theme="dark"] .yearselect,
-html.fx[data-theme="dark"] .wordmark,
-html.fx[data-theme="dark"] .map-wrap {
+html.fx[data-theme="dark"] .wordmark {
   filter: url(#print-fx-dark);
 }
 
