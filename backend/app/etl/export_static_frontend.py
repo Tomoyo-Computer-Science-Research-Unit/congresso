@@ -207,13 +207,16 @@ def favorecido_brief(fav: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def top_favorecidos(valores: dict[str, float], fav_by_codigo: dict[str, dict[str, Any]], limit: int = TOP) -> list[dict[str, Any]]:
-    ranked = sorted(valores.items(), key=lambda pair: pair[1], reverse=True)[:limit]
+def top_favorecidos(valores: dict[str, dict[str, float]], fav_by_codigo: dict[str, dict[str, Any]], limit: int = TOP) -> list[dict[str, Any]]:
+    """Top por valor recebido; ``por_ano`` e por ano de pagamento, para o filtro de ano do site."""
+
+    ranked = sorted(valores.items(), key=lambda pair: sum(pair[1].values()), reverse=True)[:limit]
     out = []
-    for codigo, valor in ranked:
+    for codigo, anos in ranked:
         fav = fav_by_codigo[codigo]
         out.append({"codigo": codigo, "slug": favorecido_slug(codigo), "nome": fav["nome"], "tipo": fav["tipo"],
-                    "valor": round(valor, 2)})
+                    "valor": round(sum(anos.values()), 2),
+                    "por_ano": {year: round(valor, 2) for year, valor in sorted(anos.items())}})
     return out
 
 
@@ -234,8 +237,8 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
             bucket["valor"] += fav["total_recebido"]
 
     ibge_by_name = {municipio_key(name): code for code, name in ibge_names.items()}
-    por_autor: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    por_destino: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    por_autor: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    por_destino: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
     linhas: dict[str, list[dict[str, Any]]] = defaultdict(list)
     municipios_sem_ibge: dict[str, float] = defaultdict(float)
     for rec in recebimentos:
@@ -243,11 +246,12 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
         fav = fav_by_codigo[codigo]
         for bucket in (por_tipo[fav["tipo"]], por_natureza[fav["natureza_juridica"]]):
             bucket["n_recebimentos"] += 1
-        por_autor[rec["autor_id"]][codigo] += rec["valor"]
+        year = str(rec["ano_mes"])[:4]
+        por_autor[rec["autor_id"]][codigo][year] += rec["valor"]
         if fav["uf"] == "RJ" and fav["municipio"]:
             ibge = ibge_by_name.get(municipio_key(fav["municipio"]))
             if ibge:
-                por_destino[ibge][codigo] += rec["valor"]
+                por_destino[ibge][codigo][year] += rec["valor"]
             else:
                 municipios_sem_ibge[fav["municipio"]] += rec["valor"]
         linhas[codigo].append({"c": rec["codigo_emenda"], "au": rec["autor_id"], "am": rec["ano_mes"],

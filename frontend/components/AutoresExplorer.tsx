@@ -98,6 +98,14 @@ export function AutoresExplorer() {
     [nominalPoints, real]
   );
   const visibleLinhas = useMemo(() => (linhas ?? []).filter((linha) => year === "all" || linha.a === year), [linhas, year]);
+  // Tipos de emenda no ano escolhido, somados das linhas já carregadas do autor.
+  const tiposNoAno = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const linha of visibleLinhas) {
+      totals[linha.t] = (totals[linha.t] ?? 0) + (metric === "empenhado" ? linha.e : linha.p + linha.rp);
+    }
+    return totals;
+  }, [metric, visibleLinhas]);
 
   const hotkeys = useMemo(
     () => ({
@@ -188,7 +196,7 @@ export function AutoresExplorer() {
             <Stat label="Linhas de emenda" value={formatInt(activeTotal.n)} />
             {year === "all"
               ? Object.entries(selected.tipos).map(([code, value]) => <Stat key={code} label={TIPO_SHORT[code] ?? code} value={<MoneySum real={value[metric]} nominal={value[metric]} />} />)
-              : null}
+              : Object.entries(tiposNoAno).map(([code, value]) => <Stat key={code} label={TIPO_SHORT[code] ?? code} value={<Money nominal={value} year={year} />} />)}
           </div>
           <YearBars points={points} metric={metric} selectedYear={year} onSelectYear={(item) => setYear(item === year ? "all" : item)} height={150} nominal={real ? Object.fromEntries(nominalPoints.map((point) => [point.year, point])) : undefined} />
         </div>
@@ -196,36 +204,52 @@ export function AutoresExplorer() {
 
       <Panel title={<b>Destinos</b>} flush fill>
         <BarList
-          rows={selected.destinos.map((row) => ({
+          rows={selected.destinos
+            .map((row) => ({
             key: row.id,
             label: row.nome ?? row.id,
-            value: valueIn(mode, row.por_ano ?? {}, row, "all", metric),
-            valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year="all" metric={metric} />,
+            value: valueIn(mode, row.por_ano ?? {}, row, year, metric),
+            valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year={year} metric={metric} />,
             href: `/destinos?m=${row.id}`
-          }))}
+          }))
+            .filter((row) => row.value > 0)
+            .sort((a, b) => b.value - a.value)}
+          empty="SEM EMENDA NESTE ANO"
         />
       </Panel>
       <Panel title={<b>Funções</b>} flush fill>
         <BarList
-          rows={selected.funcoes.map((row) => ({
+          rows={selected.funcoes
+            .map((row) => ({
             key: row.id,
             label: row.nome ?? row.id,
-            value: valueIn(mode, row.por_ano ?? {}, row, "all", metric),
-            valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year="all" metric={metric} />,
+            value: valueIn(mode, row.por_ano ?? {}, row, year, metric),
+            valueNode: <GroupMoney porAno={row.por_ano ?? {}} totais={row} year={year} metric={metric} />,
             href: `/funcoes?f=${encodeURIComponent(row.id)}`
-          }))}
+          }))
+            .filter((row) => row.value > 0)
+            .sort((a, b) => b.value - a.value)}
+          empty="SEM EMENDA NESTE ANO"
         />
       </Panel>
       <Panel title={<b>Favorecidos</b>} flush fill>
         <BarList
-          rows={(selected.favorecidos ?? []).map((row) => ({
-            key: row.codigo,
-            label: niceName(row.nome),
-            sub: row.codigo === BB_CODIGO ? "repasse fundo a fundo via BB" : row.tipo ?? undefined,
-            value: row.valor,
-            href: `/favorecidos?f=${encodeURIComponent(row.slug)}`
-          }))}
-          empty="SEM PAGAMENTO REGISTRADO"
+          rows={(selected.favorecidos ?? [])
+            .map((row) => {
+              const nominal = year === "all" ? row.valor : (row.por_ano?.[String(year)] ?? 0);
+              const value = !real ? nominal : year === "all" ? Object.entries(row.por_ano ?? {}).reduce((sum, [y, v]) => sum + adjust(v, y), 0) || nominal : adjust(nominal, year);
+              return {
+                key: row.codigo,
+                label: niceName(row.nome),
+                sub: row.codigo === BB_CODIGO ? "repasse fundo a fundo via BB" : row.tipo ?? undefined,
+                value,
+                valueNode: <MoneySum real={value} nominal={nominal} />,
+                href: `/favorecidos?f=${encodeURIComponent(row.slug)}`
+              };
+            })
+            .filter((row) => row.value > 0)
+            .sort((a, b) => b.value - a.value)}
+          empty={year === "all" ? "SEM PAGAMENTO REGISTRADO" : "SEM PAGAMENTO NESTE ANO"}
         />
       </Panel>
 

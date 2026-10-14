@@ -69,7 +69,7 @@ export type Favorecido = {
   n_autores: number;
   n_emendas: number;
 };
-export type FavorecidoRef = { codigo: string; slug: string; nome: string; tipo: string | null; valor: number };
+export type FavorecidoRef = { codigo: string; slug: string; nome: string; tipo: string | null; valor: number; por_ano?: Record<string, number> };
 export type Recebimento = { c: string; au: string; am: string; v: number; mn: string | null };
 export type Ipca = { source_url: string; fetched_at: string; base_month: string; variable: string; method: string; factors: Record<string, number>; factors_dec: Record<string, number> };
 export type RosterPerson = { nome: string; nome_parlamentar: string | null; partido: string | null; casa: string | null; legislaturas: number[] };
