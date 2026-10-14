@@ -32,9 +32,9 @@ export const metadata: Metadata = {
   publisher: "Tomoyo",
   keywords: ["Rio de Janeiro", "emendas parlamentares", "favorecidos", "orçamento", "Portal da Transparência", "deputados federais", "senadores", "dados públicos"],
   alternates: { canonical: "/" },
-  openGraph: { type: "website", locale: "pt_BR", url: SITE_URL, siteName: SITE_NAME, title: SITE_NAME, description: DESCRIPTION },
   twitter: { card: "summary", title: SITE_NAME, description: DESCRIPTION },
-  icons: { icon: `${BASE_PATH}/mon.svg`, shortcut: `${BASE_PATH}/mon.svg` }
+  icons: { icon: `${BASE_PATH}/icon.png`, shortcut: `${BASE_PATH}/icon.png`, apple: `${BASE_PATH}/icon.png` },
+  openGraph: { type: "website", locale: "pt_BR", url: SITE_URL, siteName: SITE_NAME, title: SITE_NAME, description: DESCRIPTION, images: [{ url: "/icon.png", width: 512, height: 512, alt: SITE_NAME }] }
 };
 
 // O tema segue o sistema e muda junto com ele; T inverte só nesta visita. Aplicado antes da
@@ -72,7 +72,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {/* O mon da Tomoyo leva de volta à home do g0v. */}
               <a href="https://g0v.tomoyo.systems/" aria-label="g0v.tomoyo.systems" data-brand>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE_PATH}/mon.svg`} alt="" width={28} height={28} className="mon h-[28px] w-[28px] shrink-0" data-brand />
+                <img src={`${BASE_PATH}/icon-64.png`} alt="" width={30} height={30} className="mon h-[30px] w-[30px] shrink-0 border border-line" data-brand />
               </a>
               <Link href="/" className="wordmark text-[14px] uppercase leading-none" data-brand>
                 {SITE_NAME}
