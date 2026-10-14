@@ -71,7 +71,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {/* O mon da Tomoyo leva de volta à home do g0v. */}
               <a href="https://g0v.tomoyo.systems/" aria-label="g0v.tomoyo.systems" data-brand>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE_PATH}/icon-64.png`} alt="" width={30} height={30} className="mon h-[30px] w-[30px] shrink-0 border border-line" data-brand />
+                <img src={`${BASE_PATH}/icon-line-64.png`} alt="" width={30} height={30} className="mon h-[30px] w-[30px] shrink-0" data-brand />
               </a>
               <Link href="/" className="wordmark text-[14px] uppercase leading-none" data-brand>
                 {SITE_NAME}

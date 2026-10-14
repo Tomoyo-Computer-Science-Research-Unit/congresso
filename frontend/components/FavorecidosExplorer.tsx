@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { BarList } from "@/components/BarList";
 import { useScreenHotkeys } from "@/components/Hotkeys";
-import { EmptyState, Panel, Screen, Segmented, Stat } from "@/components/ui";
+import { EmptyState, Panel, Screen, Stat } from "@/components/ui";
 import { YearBars } from "@/components/YearBars";
 import { Money, MoneySum, adjust, useMoneyMode } from "@/lib/money";
 import {
@@ -144,7 +144,21 @@ export function FavorecidosExplorer() {
 
   return (
     <Screen columns="360px minmax(0, 1fr) minmax(0, 1fr)" rows="auto minmax(0, 1fr) minmax(0, 1.2fr)">
-      <Panel title={<b>Favorecidos</b>} aside={<Segmented label="Grupo" value={grupo} options={GRUPOS} onChange={setGrupo} />} flush fill style={{ gridRow: "1 / span 3" }}>
+      <Panel
+        title={<b>Favorecidos</b>}
+        aside={
+          <select className="yearselect" aria-label="Grupo" value={grupo} onChange={(event) => setGrupo(event.target.value as Grupo)}>
+            {GRUPOS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        }
+        flush
+        fill
+        style={{ gridRow: "1 / span 3" }}
+      >
         <ul className="menu" role="listbox" aria-label="Favorecidos">
           {list.map(({ item, value }) => (
             <li key={item.slug} role="presentation">

@@ -266,6 +266,9 @@ def favorecidos_section(snapshot: dict[str, Any], ibge_names: dict[str, str],
     for lista in (*autores.values(), *destinos.values()):
         com_detalhe.update(item["codigo"] for item in lista)
     arquivos = {favorecido_slug(codigo): linhas[codigo] for codigo in com_detalhe}
+    # O nucleo leva todo favorecido que alguma lista do site linka, nao so os 300 maiores: senao o
+    # clique num favorecido de autor ou municipio nao tem pagina para abrir.
+    top = [favorecido_brief(fav) for fav in favorecidos if fav["codigo"] in com_detalhe]
 
     def rounded(buckets: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         return {key: {**b, "valor": round(b["valor"], 2)}
