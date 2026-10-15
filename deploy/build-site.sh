@@ -14,7 +14,7 @@
 set -euo pipefail
 export PATH=/usr/local/bin:/usr/bin:/bin
 
-REPO="${REPO:-https://github.com/Tomoyo-Computer-Science-Research-Unit/emendas-rj.git}"
+REPO="${REPO:-https://github.com/Tomoyo-Computer-Science-Research-Unit/congresso.git}"
 DIR="${DIR:-/root/g0v}"
 SRC="$DIR/src-emendas"
 MARK="$DIR/.emendas-built"

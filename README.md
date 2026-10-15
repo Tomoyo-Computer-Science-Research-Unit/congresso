@@ -3,7 +3,7 @@
 A bancada federal de cada UF, da Tomoyo, dentro do g0v.tomoyo.systems: emendas parlamentares,
 votações nominais e faltas em plenário dos deputados federais e senadores, as 27 UFs num site só.
 O RJ fica na raiz, as demais em /congresso/<uf>/; o seletor de UF do cabeçalho troca de UF na mesma
-tela. O repositório continua `emendas-rj`.
+tela. O repositório se chamava `emendas-rj` até outubro de 2026.
 
 O ETL baixa o arquivo "Emendas parlamentares" do Portal da Transparência (emendas e favorecidos),
 define a bancada pelas APIs da Câmara e do Senado, casa os autores do SIAFI com essa lista e publica
