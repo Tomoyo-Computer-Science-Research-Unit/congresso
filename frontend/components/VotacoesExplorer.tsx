@@ -45,12 +45,12 @@ const TIPOS: Array<{ value: TipoSel; label: string }> = [
 const GRUPOS: Array<{ key: string; label: string; codes: string[] }> = [
   { key: "S", label: "Sim", codes: ["S"] },
   { key: "N", label: "Não", codes: ["N"] },
-  { key: "A", label: "Abst., obstr.", codes: ["A", "O"] },
+  { key: "A", label: "Abstenção", codes: ["A", "O"] },
   { key: "F", label: "Não votaram", codes: ["P", "X", "F", "J"] }
 ];
 
 /** Situação de quem não votou sim ou não, curta, ao lado do nome. */
-const CURTO: Record<string, string> = { A: "abstenção", O: "obstrução", P: "presidindo", X: "presente", F: "ausente", J: "justificada" };
+const CURTO: Record<string, string> = { A: "abstenção", O: "obstrução", P: "presidindo", X: "presente sem votar", F: "ausente", J: "ausência justificada" };
 
 function normalize(value: string): string {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -299,10 +299,10 @@ export function VotacoesExplorer() {
           ) : daBancada.length === 0 ? (
             <EmptyState>NINGUÉM DA BANCADA NESTA VOTAÇÃO</EmptyState>
           ) : (
-            <div className="votegrid grid min-h-full divide-x divide-line" style={{ gridTemplateColumns: grupos.map((grupo) => `minmax(96px, ${Math.max(1, Math.min(grupo.ids.length, 14))}fr)`).join(" ") }}>
+            <div className="votegrid grid min-h-full divide-x divide-line" style={{ gridTemplateColumns: grupos.map((grupo) => (grupo.ids.length === 0 ? "max-content" : `minmax(120px, ${Math.min(grupo.ids.length, 14)}fr)`)).join(" ") }}>
               {grupos.map((grupo) => (
                 <div key={grupo.key}>
-                  <div className={`sticky top-0 border-b border-line bg-paper px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] ${votoClass(grupo.key)}`}>
+                  <div className={`sticky top-0 whitespace-nowrap border-b border-line bg-paper px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] ${votoClass(grupo.key)}`}>
                     {grupo.label} · {grupo.ids.length}
                   </div>
                   <ul className="text-[11.5px] leading-5">
