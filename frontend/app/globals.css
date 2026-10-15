@@ -1058,3 +1058,8 @@ html.fx[data-theme="dark"] .nofx {
 .app__header .yearselect {
   letter-spacing: 0.06em;
 }
+
+/* Discord flutuante do g0v: acima da barra de status. */
+:root {
+  --g0v-discord-bottom: 34px;
+}
