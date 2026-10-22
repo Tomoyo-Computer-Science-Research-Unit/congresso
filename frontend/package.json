@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test": "playwright test",
     "test:visual": "playwright test",
     "stage-data": "node scripts/stage-data.mjs",
@@ -20,6 +21,7 @@
     "recharts": "^2.13.3"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
     "@playwright/test": "^1.60.0",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^22.9.0",
