@@ -1,4 +1,8 @@
+*This project has been created as part of the 42 curriculum by c3c4d4.*
+
 # Congresso
+
+## Description
 
 A bancada federal de cada UF, da Tomoyo, dentro do g0v.tomoyo.systems: emendas parlamentares,
 votações nominais e faltas em plenário dos deputados federais e senadores, as 27 UFs num site só.
@@ -20,22 +24,7 @@ lista de votos e as faltas.
 
 Site: https://g0v.tomoyo.systems/congresso/ (RJ), https://g0v.tomoyo.systems/congresso/sp/, …/mg/, …/df/ etc.
 
-## Dados
-
-| Fonte | Uso |
-| --- | --- |
-| [Portal da Transparência, emendas parlamentares](https://portaldatransparencia.gov.br/download-de-dados/emendas-parlamentares) | zip único: `EmendasParlamentares.csv` (~95 mil linhas, 2014–2026) e `_PorFavorecido.csv` (827 mil linhas, filtradas para a bancada), lidos por `backend/app/parsers/` |
-| [Câmara dos Deputados, dados abertos](https://dadosabertos.camara.leg.br/) | deputados por legislatura (54–57), filtrados pela UF, mais o nome civil de cada um |
-| [Senado Federal, dados abertos](https://legis.senado.leg.br/dadosabertos/) | senadores por legislatura com mandato pela UF e exercício efetivo |
-| [Câmara, arquivos anuais](https://dadosabertos.camara.leg.br/arquivos/) | votacoes, votacoesVotos, votacoesOrientacoes, votacoesProposicoes, eventos, eventosOrgaos, eventosPresencaDeputados, 2015 em diante |
-| [Câmara, API v2](https://dadosabertos.camara.leg.br/api/v2/) | histórico de exercício de cada deputado (`/deputados/{id}/historico`) e lacunas dos arquivos |
-| [Senado, /votacao](https://legis.senado.leg.br/dadosabertos/votacao) | votações nominais com voto por senador, um ano por pedido; orientação de bancada do painel (`/plenario/votacao/orientacaoBancada`) |
-| IBGE | malha municipal da UF (API de malhas v3, estados/33 e estados/35), população do Censo 2022 (SIDRA 4714) e IPCA mensal (SIDRA 1737) |
-
-Ficam de fora: 2014 (sem autor no arquivo), emendas de relator (RP 9) e de comissão (RP 8),
-bancadas de outros estados. Detalhes, contagens reais e ressalvas em `FINDINGS.md`.
-
-## Layout
+### Layout
 
 ```text
 backend/app/
@@ -67,7 +56,9 @@ frontend/
 deploy/build-site.sh          roda no servidor, por cron, uma vez por dia
 ```
 
-## Setup
+## Instructions
+
+### Setup
 
 ```bash
 cd backend && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
@@ -79,7 +70,7 @@ cd ../frontend && npm ci && npm run dev
 
 Gates: `cd backend && .venv/bin/python -m pytest -q`; `cd frontend && npx tsc --noEmit && npm run build && npm run test:visual`.
 
-## Deploy
+### Deploy
 
 O site vive em `g0v.tomoyo.systems/congresso` (RJ na raiz, demais UFs em `/congresso/<uf>/`, dados em
 `/congresso/data/<uf>/` e `/congresso/data/votacoes/`), no mesmo nginx estático do Perdeu, Playboy
@@ -95,3 +86,25 @@ por e-mail. Para publicar na hora, depois de um push:
 ```bash
 ssh root@mail.tomoyo.systems 'FORCE=1 SKIP_DATA=1 /root/g0v/build-emendas.sh'
 ```
+
+## Resources
+
+| Fonte | Uso |
+| --- | --- |
+| [Portal da Transparência, emendas parlamentares](https://portaldatransparencia.gov.br/download-de-dados/emendas-parlamentares) | zip único: `EmendasParlamentares.csv` (~95 mil linhas, 2014–2026) e `_PorFavorecido.csv` (827 mil linhas, filtradas para a bancada), lidos por `backend/app/parsers/` |
+| [Câmara dos Deputados, dados abertos](https://dadosabertos.camara.leg.br/) | deputados por legislatura (54–57), filtrados pela UF, mais o nome civil de cada um |
+| [Senado Federal, dados abertos](https://legis.senado.leg.br/dadosabertos/) | senadores por legislatura com mandato pela UF e exercício efetivo |
+| [Câmara, arquivos anuais](https://dadosabertos.camara.leg.br/arquivos/) | votacoes, votacoesVotos, votacoesOrientacoes, votacoesProposicoes, eventos, eventosOrgaos, eventosPresencaDeputados, 2015 em diante |
+| [Câmara, API v2](https://dadosabertos.camara.leg.br/api/v2/) | histórico de exercício de cada deputado (`/deputados/{id}/historico`) e lacunas dos arquivos |
+| [Senado, /votacao](https://legis.senado.leg.br/dadosabertos/votacao) | votações nominais com voto por senador, um ano por pedido; orientação de bancada do painel (`/plenario/votacao/orientacaoBancada`) |
+| IBGE | malha municipal da UF (API de malhas v3, estados/33 e estados/35), população do Censo 2022 (SIDRA 4714) e IPCA mensal (SIDRA 1737) |
+
+Detalhes, contagens reais e ressalvas em `FINDINGS.md`.
+
+AI was used to scaffold the ETL (downloads with cache, snapshot and export scripts), to write the parsers of the Portal da Transparência, Câmara and Senado files and the frontend shell; the result was reviewed against the sources listed above and tested with the fixtures in `backend/tests/fixtures` and the Playwright tests in `frontend/tests`.
+
+## Limitations
+
+Ficam de fora: 2014 (sem autor no arquivo), emendas de relator (RP 9) e de comissão (RP 8).
+As votações nominais e a presença cobrem a Câmara e o Senado desde 2015-02-01 (legislaturas 55
+a 57). Detalhes, contagens reais e ressalvas em `FINDINGS.md`.
