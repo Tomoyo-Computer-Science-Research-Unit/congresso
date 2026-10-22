@@ -16,3 +16,4 @@ frontend/out-test*/
 data/snapshot-*.json
 frontend/public/data/
 frontend/public/[a-z][a-z]/
+*.egg-info/
