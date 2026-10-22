@@ -1,5 +1,5 @@
 [project]
-name = "emendas-rj-backend"
+name = "congresso-backend"
 version = "0.1.0"
 description = "ETL: emendas parlamentares da bancada fluminense (Portal da Transparencia + Camara + Senado)"
 requires-python = ">=3.12"
