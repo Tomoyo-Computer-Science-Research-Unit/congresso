@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import ssl
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,13 @@ def _verify_with_intermediates() -> ssl.SSLContext:
     if _ctx is None:
         ctx = ssl.create_default_context()
         for url in EXTRA_INTERMEDIATES:
-            der = httpx.get(url, headers={"User-Agent": UA}, timeout=30.0, follow_redirects=True).content
+            try:
+                r = httpx.get(url, headers={"User-Agent": UA}, timeout=30.0, follow_redirects=True)
+                r.raise_for_status()
+            except httpx.HTTPError as e:
+                print(f"intermediate certificate not fetched, continuing without it: {url}: {e}", file=sys.stderr)
+                continue
+            der = r.content
             pem = ssl.DER_cert_to_PEM_cert(der) if not der.startswith(b"-----") else der.decode()
             ctx.load_verify_locations(cadata=pem)
         _ctx = ctx
@@ -78,7 +85,6 @@ def fetch_file(url: str, dest: Path, *, force: bool = False, headers: dict[str, 
             if attempt == 3:
                 raise
             time.sleep(2.0 * (attempt + 1))
-            last = e  # noqa: F841
     raise RuntimeError("unreachable")
 
 
